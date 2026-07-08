@@ -1,588 +1,771 @@
-import React, { useState, useEffect, useRef } from 'react';import { initializeApp } from 'firebase/app';import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';// Inisialisasi Firebaselet app, auth, db, appId;try {const firebaseConfig = {apiKey: import.meta.env.VITE_FIREBASE_API_KEY,authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,appId: import.meta.env.VITE_FIREBASE_APP_ID};app = initializeApp(firebaseConfig);auth = getAuth(app);db = getFirestore(app);appId = 'whatsapp-tracker';} catch(e) {console.warn("Sistem Cloud sedang offline. Menggunakan penyimpanan lokal sementara.");}export default function App() {const [user, setUser] = useState(null);const [activeTab, setActiveTab] = useState('home');const [inputText, setInputText] = useState('');const [parsedData, setParsedData] = useState(() => {try {const savedData = localStorage.getItem('offline_activities');return savedData ? JSON.parse(savedData) : [];} catch (error) {return [];}});const [isModalOpen, setIsModalOpen] = useState(false);const [editingItem, setEditingItem] = useState(null);const [toast, setToast] = useState('');const fileInputRef = useRef(null);const pressTimer = useRef(null);const [dateFilter, setDateFilter] = useState('all');const [customStartDate, setCustomStartDate] = useState('');const [customEndDate, setCustomEndDate] = useState('');const [isSelectionMode, setIsSelectionMode] = useState(false);const [selectedItems, setSelectedItems] = useState([]);const [categoryModalOpen, setCategoryModalOpen] = useState(false);const [bulkCategory, setBulkCategory] = useState('');const [expandedId, setExpandedId] = useState(null);useEffect(() => {localStorage.setItem('offline_activities', JSON.stringify(parsedData));}, [parsedData]);useEffect(() => {if (!auth) return;const initAuth = async () => {try {if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {await signInWithCustomToken(auth, __initial_auth_token);} else {await signInAnonymously(auth);}} catch (error) {console.error("Auth error:", error);}};initAuth();const unsubscribe = onAuthStateChanged(auth, setUser);return () => unsubscribe();}, []);useEffect(() => {if (!user || !db) return;const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'activities');const unsubscribe = onSnapshot(colRef, (snapshot) => {const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));data.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));setParsedData(data);}, (error) => {console.error("Firestore error:", error);});return () => unsubscribe();}, [user]);const showToast = (msg) => {setToast(msg);setTimeout(() => setToast(''), 3000);};const calculateDurationInfo = (startTime, endTime) => {const start = startTime.replace(/./g, ':');const end = endTime.replace(/./g, ':');const [startHour, startMin] = start.split(':').map(Number);const [endHour, endMin] = end.split(':').map(Number);let startTotalMinutes = startHour * 60 + startMin;
-let endTotalMinutes = endHour * 60 + endMin;
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
-if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+// Inisialisasi Firebase
+// KODE BARU:
+let app, auth, db, appId;
+try {
+  // Masukkan config dari project settings Firebase Anda di sini
+  const firebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
+  };
+  
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  appId = 'whatsapp-tracker'; 
+} catch(e) {
+  console.warn("Sistem Cloud sedang offline. Menggunakan penyimpanan lokal sementara.");
+}
 
-const diffMinutes = endTotalMinutes - startTotalMinutes;
-const hours = Math.floor(diffMinutes / 60);
-const minutes = diffMinutes % 60;
-
-let text = '';
-if (hours > 0 && minutes > 0) text = `${hours}j ${minutes}m`;
-else if (hours > 0) text = `${hours}j`;
-else text = `${minutes}m`;
-
-return { text, rawMinutes: diffMinutes };
-};const finalizeSession = (session) => {let totalMinutes = 0;session.segments.forEach(seg => {if(seg.start && seg.end) {const info = calculateDurationInfo(seg.start, seg.end);seg.rawMinutes = info.rawMinutes;totalMinutes += info.rawMinutes;}});session.startTime = session.segments[0].start;session.endTime = session.segments[session.segments.length - 1].end || session.startTime;session.rawMinutes = totalMinutes;session.activity = session.message;const hours = Math.floor(totalMinutes / 60);
-const minutes = totalMinutes % 60;
-if (hours > 0 && minutes > 0) session.durationText = `${hours}j ${minutes}m`;
-else if (hours > 0) session.durationText = `${hours}j`;
-else session.durationText = `${minutes}m`;
-
-return session;
-};const handleParse = async () => {if (!inputText.trim()) {showToast('Teks kosong.');return;}const lines = inputText.split('\n');
-const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
-const newActivities = [];
-
-let activeSession = null;
-let lastTime = null;
-
-lines.forEach((line) => {
-  const match = line.match(regex);
-  if (match) {
-    const date = match[1];
-    let time = match[2];
-    let message = match[4].trim();
-
-    const explicitTimeMatch = message.match(/^(\d{1,2}[.:]\d{2})\s+(.*)/);
-    if (explicitTimeMatch) {
-      time = explicitTimeMatch[1];
-      message = explicitTimeMatch[2].trim();
-    }
-
-    const isEndMarker = message === '.';
-    const isPauseMarker = message === '..';
-    const isResumeMarker = message === '...';
-    
-    let activityFromDot = null;
-    if (!isEndMarker && !isPauseMarker && !isResumeMarker && message.startsWith('.')) {
-      activityFromDot = message.substring(1).trim();
-    }
-
-    if (isPauseMarker) {
-      if (activeSession && activeSession.segments.length > 0) {
-          let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-          if (!lastSeg.end) lastSeg.end = time;
-      }
-    } else if (isResumeMarker) {
-      if (activeSession) {
-          activeSession.segments.push({ start: time, end: null });
-      }
-    } else if (isEndMarker) {
-      if (activeSession) {
-          let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-          if (!lastSeg.end) lastSeg.end = time;
-          newActivities.push(finalizeSession(activeSession));
-          activeSession = null;
-      }
-    } else if (activityFromDot) {
-      if (activeSession) {
-          let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-          if (!lastSeg.end) lastSeg.end = time;
-          newActivities.push(finalizeSession(activeSession));
-      }
-      if (lastTime) {
-          let newSess = { id: crypto.randomUUID(), date, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
-          newActivities.push(finalizeSession(newSess));
-      }
-      activeSession = null;
-    } else {
-      if (activeSession) {
-          let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-          if (!lastSeg.end) lastSeg.end = time;
-          newActivities.push(finalizeSession(activeSession));
-      }
-      activeSession = { id: crypto.randomUUID(), date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
-    }
-
-    lastTime = time;
-  }
-});
-
-if (newActivities.length > 0) {
-  if (user && db) {
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('home');
+  const [inputText, setInputText] = useState('');
+  const [parsedData, setParsedData] = useState(() => {
+    // Membaca cache lokal jika Firebase offline atau belum termuat
     try {
+      const savedData = localStorage.getItem('offline_activities');
+      return savedData ? JSON.parse(savedData) : [];
+    } catch (error) {
+      return [];
+    }
+  });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [toast, setToast] = useState('');
+  
+  const fileInputRef = useRef(null);
+  const pressTimer = useRef(null);
+
+  // Filter, Seleksi, Kategori, & Expand
+  const [dateFilter, setDateFilter] = useState('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [expandedId, setExpandedId] = useState(null); // Menyimpan ID aktivitas yang sedang diklik untuk melihat detail
+  // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
+  useEffect(() => {
+    localStorage.setItem('offline_activities', JSON.stringify(parsedData));
+  }, [parsedData]);
+
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !db) return;
+    const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'activities');
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      setParsedData(data);
+    }, (error) => {
+      console.error("Firestore error:", error);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  };
+
+  const calculateDurationInfo = (startTime, endTime) => {
+    const start = startTime.replace(/\./g, ':');
+    const end = endTime.replace(/\./g, ':');
+    const [startHour, startMin] = start.split(':').map(Number);
+    const [endHour, endMin] = end.split(':').map(Number);
+
+    let startTotalMinutes = startHour * 60 + startMin;
+    let endTotalMinutes = endHour * 60 + endMin;
+
+    if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+
+    const diffMinutes = endTotalMinutes - startTotalMinutes;
+    const hours = Math.floor(diffMinutes / 60);
+    const minutes = diffMinutes % 60;
+
+    let text = '';
+    if (hours > 0 && minutes > 0) text = `${hours}j ${minutes}m`;
+    else if (hours > 0) text = `${hours}j`;
+    else text = `${minutes}m`;
+
+    return { text, rawMinutes: diffMinutes };
+  };
+
+  // Fungsi untuk memfinalisasi satu sesi (termasuk yang memiliki jeda/segmen)
+  const finalizeSession = (session) => {
+    let totalMinutes = 0;
+    session.segments.forEach(seg => {
+        if(seg.start && seg.end) {
+            const info = calculateDurationInfo(seg.start, seg.end);
+            seg.rawMinutes = info.rawMinutes;
+            totalMinutes += info.rawMinutes;
+        }
+    });
+    session.startTime = session.segments[0].start;
+    // Jika tidak ada end karena format cacat, gunakan start
+    session.endTime = session.segments[session.segments.length - 1].end || session.startTime;
+    session.rawMinutes = totalMinutes;
+    session.activity = session.message; // mapping dari variabel temp
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0 && minutes > 0) session.durationText = `${hours}j ${minutes}m`;
+    else if (hours > 0) session.durationText = `${hours}j`;
+    else session.durationText = `${minutes}m`;
+
+    return session;
+  };
+
+  const handleParse = async () => {
+    if (!inputText.trim()) {
+      showToast('Teks kosong.');
+      return;
+    }
+
+    const lines = inputText.split('\n');
+    const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
+    const newActivities = [];
+    
+    let activeSession = null;
+    let lastTime = null;
+
+    lines.forEach((line) => {
+      const match = line.match(regex);
+      if (match) {
+        const date = match[1];
+        let time = match[2];
+        let message = match[4].trim();
+
+        const explicitTimeMatch = message.match(/^(\d{1,2}[.:]\d{2})\s+(.*)/);
+        if (explicitTimeMatch) {
+          time = explicitTimeMatch[1];
+          message = explicitTimeMatch[2].trim();
+        }
+
+        const isEndMarker = message === '.';
+        const isPauseMarker = message === '..';
+        const isResumeMarker = message === '...';
+        
+        let activityFromDot = null;
+        if (!isEndMarker && !isPauseMarker && !isResumeMarker && message.startsWith('.')) {
+          activityFromDot = message.substring(1).trim();
+        }
+
+        if (isPauseMarker) {
+          // JEDA: Tutup segmen yang sedang berjalan, biarkan sesi tetap hidup
+          if (activeSession && activeSession.segments.length > 0) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = time;
+          }
+        } else if (isResumeMarker) {
+          // LANJUT: Buka segmen baru pada sesi yang sama
+          if (activeSession) {
+              activeSession.segments.push({ start: time, end: null });
+          }
+        } else if (isEndMarker) {
+          // SELESAI: Tutup segmen terakhir dan finalisasi seluruh sesi
+          if (activeSession) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = time;
+              newActivities.push(finalizeSession(activeSession));
+              activeSession = null;
+          }
+        } else if (activityFromDot) {
+          // BACKWARD (Mundur)
+          if (activeSession) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = time;
+              newActivities.push(finalizeSession(activeSession));
+          }
+          if (lastTime) {
+              let newSess = { id: crypto.randomUUID(), date, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
+              newActivities.push(finalizeSession(newSess));
+          }
+          activeSession = null;
+        } else {
+          // AKTIVITAS BARU
+          if (activeSession) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = time;
+              newActivities.push(finalizeSession(activeSession));
+          }
+          activeSession = { id: crypto.randomUUID(), date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+        }
+
+        lastTime = time;
+      }
+    });
+
+    if (newActivities.length > 0) {
+      if (user && db) {
+        try {
+          const batch = writeBatch(db);
+          newActivities.forEach(act => {
+            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
+            batch.set(docRef, act);
+          });
+          await batch.commit();
+          showToast('Data berhasil ditambahkan!');
+        } catch(e) {
+          setParsedData(prev => [...prev, ...newActivities]);
+          showToast('Disimpan sementara (Mode Offline)');
+        }
+      } else {
+        setParsedData(prev => [...prev, ...newActivities]);
+        showToast('Disimpan sementara (Mode Offline)');
+      }
+    } else {
+      showToast('Tidak ada format data valid yang ditemukan.');
+    }
+
+    setIsModalOpen(false);
+    setInputText('');
+  };
+
+  const handleExport = () => {
+    if (parsedData.length === 0) {
+      showToast('Tidak ada data untuk diekspor.');
+      return;
+    }
+    const dataStr = JSON.stringify(parsedData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'riwayat_aktivitas.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Berhasil diekspor!');
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        if (Array.isArray(importedData)) {
+          if (user && db) {
+            const batch = writeBatch(db);
+            importedData.forEach(act => {
+              const newId = act.id || crypto.randomUUID();
+              const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', newId);
+              batch.set(docRef, { ...act, id: newId });
+            });
+            await batch.commit();
+            showToast('Data berhasil diimpor!');
+          } else {
+            setParsedData(prev => {
+               const merged = [...prev, ...importedData];
+               return Array.from(new Map(merged.map(item => [item.id, item])).values());
+            });
+            showToast('Data diimpor (Mode Offline)');
+          }
+        }
+      } catch (error) {
+        showToast('Format file JSON tidak valid.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const durInfo = calculateDurationInfo(editingItem.startTime, editingItem.endTime);
+      const updatedItem = { ...editingItem, durationText: durInfo.text, rawMinutes: durInfo.rawMinutes };
+      
+      // Jika jam diedit, sistem akan menyatukan segmen menjadi satu agar kalkulasi tidak error
+      if (updatedItem.segments) updatedItem.segments = null; 
+
+      if (user && db) {
+         const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);
+         await updateDoc(docRef, updatedItem);
+      } else {
+         setParsedData(prev => prev.map(item => item.id === editingItem.id ? updatedItem : item));
+      }
+      showToast('Data diperbarui!');
+      setEditingItem(null);
+    } catch (e) {
+      showToast('Gagal! Format jam salah.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (user && db) {
+       const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);
+       await deleteDoc(docRef);
+    } else {
+       setParsedData(prev => prev.filter(item => item.id !== editingItem.id));
+    }
+    showToast('Aktivitas dihapus!');
+    setEditingItem(null);
+  };
+
+  const parseDateStr = (dateStr) => {
+    const parts = dateStr.split('/');
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();
+    const fullYear = year < 100 ? 2000 + year : year;
+    return new Date(fullYear, month, day);
+  };
+
+  const filteredData = parsedData.filter(item => {
+    if (dateFilter === 'all') return true;
+    const itemDate = parseDateStr(item.date);
+    itemDate.setHours(0,0,0,0);
+
+    if (dateFilter === 'today') {
+      const today = new Date(); today.setHours(0,0,0,0);
+      return itemDate.getTime() === today.getTime();
+    }
+    if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      const s = new Date(customStartDate); s.setHours(0,0,0,0);
+      const e = new Date(customEndDate); e.setHours(0,0,0,0);
+      return itemDate >= s && itemDate <= e;
+    }
+    return true;
+  });
+
+  const availableCategories = Array.from(new Set([
+    'Produktif', 'Non Produktif', ...parsedData.map(d => d.category).filter(Boolean)
+  ]));
+
+  const handlePointerDown = (id) => {
+    if (isSelectionMode) return;
+    pressTimer.current = setTimeout(() => {
+      setIsSelectionMode(true);
+      setSelectedItems([id]);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500); 
+  };
+  
+  const handlePointerUp = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+  
+  const toggleSelection = (id) => {
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (user && db) {
       const batch = writeBatch(db);
-      newActivities.forEach(act => {
-        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
-        batch.set(docRef, act);
+      selectedItems.forEach(id => {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);
+        batch.delete(docRef);
       });
       await batch.commit();
-      showToast('Data berhasil ditambahkan!');
-    } catch(e) {
-      setParsedData(prev => [...prev, ...newActivities]);
-      showToast('Disimpan sementara (Mode Offline)');
+    } else {
+      setParsedData(prev => prev.filter(item => !selectedItems.includes(item.id)));
     }
-  } else {
-    setParsedData(prev => [...prev, ...newActivities]);
-    showToast('Disimpan sementara (Mode Offline)');
-  }
-} else {
-  showToast('Tidak ada format data valid yang ditemukan.');
-}
+    showToast(`${selectedItems.length} aktivitas dihapus!`);
+    setIsSelectionMode(false);
+    setSelectedItems([]);
+  };
 
-setIsModalOpen(false);
-setInputText('');
-};const handleExport = () => {if (parsedData.length === 0) {showToast('Tidak ada data untuk diekspor.');return;}const dataStr = JSON.stringify(parsedData, null, 2);const blob = new Blob([dataStr], { type: 'application/json' });const url = URL.createObjectURL(blob);const link = document.createElement('a');link.href = url;link.download = 'riwayat_aktivitas.json';link.click();URL.revokeObjectURL(url);showToast('Berhasil diekspor!');};const handleImport = async (e) => {const file = e.target.files[0];if (!file) return;const reader = new FileReader();
-reader.onload = async (event) => {
-  try {
-    const importedData = JSON.parse(event.target.result);
-    if (Array.isArray(importedData)) {
-      if (user && db) {
-        const batch = writeBatch(db);
-        importedData.forEach(act => {
-          const newId = act.id || crypto.randomUUID();
-          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', newId);
-          batch.set(docRef, { ...act, id: newId });
-        });
-        await batch.commit();
-        showToast('Data berhasil diimpor!');
-      } else {
-        setParsedData(prev => {
-           const merged = [...prev, ...importedData];
-           return Array.from(new Map(merged.map(item => [item.id, item])).values());
-        });
-        showToast('Data diimpor (Mode Offline)');
-      }
+  const handleBulkCategory = async () => {
+    const catToSet = bulkCategory.trim();
+    if (!catToSet) { showToast('Ketik atau pilih kategori!'); return; }
+
+    if (user && db) {
+      const batch = writeBatch(db);
+      selectedItems.forEach(id => {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);
+        batch.update(docRef, { category: catToSet });
+      });
+      await batch.commit();
+    } else {
+      setParsedData(prev => prev.map(item => selectedItems.includes(item.id) ? { ...item, category: catToSet } : item));
     }
-  } catch (error) {
-    showToast('Format file JSON tidak valid.');
-  }
-};
-reader.readAsText(file);
-e.target.value = null; 
-};const handleSaveEdit = async () => {try {let updatedItem = { ...editingItem };const hasManySegments = editingItem.segments && editingItem.segments.length > 1;  // Hanya hitung dan izinkan update waktu jika sesi cuma 1 atau kurang.
-  // Jika > 1 (multi-sesi), waktu utama DIBEKUKAN/TIDAK DIUBAH di sini.
-  if (!hasManySegments) {
-    const durInfo = calculateDurationInfo(editingItem.startTime, editingItem.endTime);
-    updatedItem = { ...updatedItem, durationText: durInfo.text, rawMinutes: durInfo.rawMinutes };
-    
-    // Sinkronkan data di dalam array segments (jika ada) agar tidak konflik
-    if (updatedItem.segments && updatedItem.segments.length === 1) {
-      updatedItem.segments[0].start = editingItem.startTime;
-      updatedItem.segments[0].end = editingItem.endTime;
-      updatedItem.segments[0].rawMinutes = durInfo.rawMinutes;
-    }
-  }
+    showToast(`${selectedItems.length} aktivitas diubah kategorinya!`);
+    setCategoryModalOpen(false);
+    setIsSelectionMode(false);
+    setSelectedItems([]);
+    setBulkCategory('');
+  };
 
-  if (user && db) {
-     const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);
-     await updateDoc(docRef, updatedItem);
-  } else {
-     setParsedData(prev => prev.map(item => item.id === editingItem.id ? updatedItem : item));
-  }
-  showToast('Data diperbarui!');
-  setEditingItem(null);
-} catch (e) {
-  showToast('Gagal! Format jam salah.');
-}
-};// FUNGSI BARU: Menghapus Sesi Spesifikconst handleDeleteSegment = async (activity, segmentIndex) => {if (activity.segments.length <= 1) {showToast('Tidak bisa menghapus satu-satunya sesi!');return;}// Buang sesi yang dipilih
-const newSegments = activity.segments.filter((_, i) => i !== segmentIndex);
+  const totalMinutesAll = filteredData.reduce((acc, curr) => acc + curr.rawMinutes, 0);
+  const totalHours = Math.floor(totalMinutesAll / 60);
+  const totalMins = totalMinutesAll % 60;
+  const totalDurationText = totalHours > 0 ? `${totalHours} Jam ${totalMins} Menit` : `${totalMins} Menit`;
 
-// Hitung ulang total waktu dari sisa sesi
-let totalMinutes = 0;
-newSegments.forEach(seg => {
-    totalMinutes += seg.rawMinutes;
-});
+  const categoryStats = filteredData.reduce((acc, curr) => {
+    const cat = curr.category || 'Belum Kategori';
+    acc[cat] = (acc[cat] || 0) + curr.rawMinutes;
+    return acc;
+  }, {});
 
-// Update Waktu Utama
-const newStartTime = newSegments[0].start;
-const newEndTime = newSegments[newSegments.length - 1].end || newStartTime;
-
-const hours = Math.floor(totalMinutes / 60);
-const minutes = totalMinutes % 60;
-let newDurationText = '';
-if (hours > 0 && minutes > 0) newDurationText = `${hours}j ${minutes}m`;
-else if (hours > 0) newDurationText = `${hours}j`;
-else newDurationText = `${minutes}m`;
-
-const updatedItem = {
-    ...activity,
-    segments: newSegments,
-    startTime: newStartTime,
-    endTime: newEndTime,
-    rawMinutes: totalMinutes,
-    durationText: newDurationText
-};
-
-// Simpan Perubahan ke Database / Cache
-if (user && db) {
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', activity.id);
-    await updateDoc(docRef, updatedItem);
-} else {
-    setParsedData(prev => prev.map(item => item.id === activity.id ? updatedItem : item));
-}
-showToast('Sesi berhasil dihapus!');
-};const handleDelete = async () => {if (user && db) {const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);await deleteDoc(docRef);} else {setParsedData(prev => prev.filter(item => item.id !== editingItem.id));}showToast('Aktivitas dihapus!');setEditingItem(null);};const parseDateStr = (dateStr) => {const parts = dateStr.split('/');const day = parseInt(parts[0], 10);const month = parseInt(parts[1], 10) - 1;const year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();const fullYear = year < 100 ? 2000 + year : year;return new Date(fullYear, month, day);};const filteredData = parsedData.filter(item => {if (dateFilter === 'all') return true;const itemDate = parseDateStr(item.date);itemDate.setHours(0,0,0,0);if (dateFilter === 'today') {
-  const today = new Date(); today.setHours(0,0,0,0);
-  return itemDate.getTime() === today.getTime();
-}
-if (dateFilter === 'custom' && customStartDate && customEndDate) {
-  const s = new Date(customStartDate); s.setHours(0,0,0,0);
-  const e = new Date(customEndDate); e.setHours(0,0,0,0);
-  return itemDate >= s && itemDate <= e;
-}
-return true;
-});const availableCategories = Array.from(new Set(['Produktif', 'Non Produktif', ...parsedData.map(d => d.category).filter(Boolean)]));const handlePointerDown = (id) => {if (isSelectionMode) return;pressTimer.current = setTimeout(() => {setIsSelectionMode(true);setSelectedItems([id]);if (navigator.vibrate) navigator.vibrate(50);}, 500);};const handlePointerUp = () => {if (pressTimer.current) clearTimeout(pressTimer.current);};const toggleSelection = (id) => {setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);};const handleBulkDelete = async () => {if (user && db) {const batch = writeBatch(db);selectedItems.forEach(id => {const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);batch.delete(docRef);});await batch.commit();} else {setParsedData(prev => prev.filter(item => !selectedItems.includes(item.id)));}showToast(${selectedItems.length} aktivitas dihapus!);setIsSelectionMode(false);setSelectedItems([]);};const handleBulkCategory = async () => {const catToSet = bulkCategory.trim();if (!catToSet) { showToast('Ketik atau pilih kategori!'); return; }if (user && db) {
-  const batch = writeBatch(db);
-  selectedItems.forEach(id => {
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);
-    batch.update(docRef, { category: catToSet });
-  });
-  await batch.commit();
-} else {
-  setParsedData(prev => prev.map(item => selectedItems.includes(item.id) ? { ...item, category: catToSet } : item));
-}
-showToast(`${selectedItems.length} aktivitas diubah kategorinya!`);
-setCategoryModalOpen(false);
-setIsSelectionMode(false);
-setSelectedItems([]);
-setBulkCategory('');
-};const totalMinutesAll = filteredData.reduce((acc, curr) => acc + curr.rawMinutes, 0);const totalHours = Math.floor(totalMinutesAll / 60);const totalMins = totalMinutesAll % 60;const totalDurationText = totalHours > 0 ? ${totalHours} Jam ${totalMins} Menit : ${totalMins} Menit;const categoryStats = filteredData.reduce((acc, curr) => {const cat = curr.category || 'Belum Kategori';acc[cat] = (acc[cat] || 0) + curr.rawMinutes;return acc;}, {});return (    {toast && (
-      <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
-        {toast}
-      </div>
-    )}
-
-    <div className="flex-1 pb-28 p-6">
-      
-      {activeTab === 'home' && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Aktivitas Saya</h2>
-            <select 
-              className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-            >
-              <option value="all">Semua Waktu</option>
-              <option value="today">Hari Ini</option>
-              <option value="custom">Pilih Tanggal...</option>
-            </select>
+  return (
+    <div className="flex justify-center bg-gray-200 min-h-screen font-sans">
+      <div className="w-full max-w-md bg-gray-50 min-h-screen relative flex flex-col shadow-2xl">
+        
+        {toast && (
+          <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
+            {toast}
           </div>
+        )}
 
-          {dateFilter === 'custom' && (
-            <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-              <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
-              <span className="self-center text-gray-400 font-bold">-</span>
-              <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
-            </div>
-          )}
+        <div className="flex-1 pb-28 p-6">
           
-          {filteredData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-gray-400 mt-24">
-              <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              <p className="font-medium text-gray-500">Belum ada data tersimpan</p>
-              <p className="text-xs mt-1">Tekan tombol + di bawah untuk menambah.</p>
-            </div>
-          ) : (
-            filteredData.map((item) => {
-              const hasSegments = item.segments && item.segments.length > 1;
-              return (
-              <div 
-                key={item.id} 
-                onPointerDown={() => handlePointerDown(item.id)}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                onClick={() => {
-                  if (isSelectionMode) toggleSelection(item.id);
-                  else if (hasSegments) setExpandedId(expandedId === item.id ? null : item.id);
-                }}
-                className={`bg-white p-4 rounded-2xl shadow-sm border ${isSelectionMode && selectedItems.includes(item.id) ? 'border-orange-500 bg-orange-50/50' : 'border-gray-100'} flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''}`}
-              >
-                <div className="flex justify-between items-center w-full">
-                    {isSelectionMode && (
-                       <div className="mr-3 flex-shrink-0">
-                         <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${selectedItems.includes(item.id) ? 'bg-orange-500 border-orange-500' : 'border-gray-300'}`}>
-                           {selectedItems.includes(item.id) && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
-                         </div>
+          {activeTab === 'home' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Aktivitas Saya</h2>
+                <select 
+                  className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                >
+                  <option value="all">Semua Waktu</option>
+                  <option value="today">Hari Ini</option>
+                  <option value="custom">Pilih Tanggal...</option>
+                </select>
+              </div>
+
+              {dateFilter === 'custom' && (
+                <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <span className="self-center text-gray-400 font-bold">-</span>
+                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                </div>
+              )}
+              
+              {filteredData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-gray-400 mt-24">
+                  <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  <p className="font-medium text-gray-500">Belum ada data tersimpan</p>
+                  <p className="text-xs mt-1">Tekan tombol + di bawah untuk menambah.</p>
+                </div>
+              ) : (
+                filteredData.map((item) => {
+                  const hasSegments = item.segments && item.segments.length > 1;
+                  return (
+                  <div 
+                    key={item.id} 
+                    onPointerDown={() => handlePointerDown(item.id)}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerUp}
+                    onClick={() => {
+                      if (isSelectionMode) toggleSelection(item.id);
+                      else if (hasSegments) setExpandedId(expandedId === item.id ? null : item.id);
+                    }}
+                    className={`bg-white p-4 rounded-2xl shadow-sm border ${isSelectionMode && selectedItems.includes(item.id) ? 'border-orange-500 bg-orange-50/50' : 'border-gray-100'} flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''}`}
+                  >
+                    <div className="flex justify-between items-center w-full">
+                        {isSelectionMode && (
+                           <div className="mr-3 flex-shrink-0">
+                             <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${selectedItems.includes(item.id) ? 'bg-orange-500 border-orange-500' : 'border-gray-300'}`}>
+                               {selectedItems.includes(item.id) && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                             </div>
+                           </div>
+                        )}
+
+                        <div className="flex-1 pr-4">
+                          <p className="font-bold text-gray-800 text-lg break-words">
+                            {item.activity}
+                            {hasSegments && (
+                               <span className="inline-block ml-2 align-middle text-gray-300">
+                                   <svg className={`w-5 h-5 transform transition-transform ${expandedId === item.id ? 'rotate-180 text-orange-500' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                            )}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <p className="text-xs font-medium text-gray-400">{item.date} • {item.startTime} - {item.endTime}</p>
+                            {item.category && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{item.category}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full text-sm font-extrabold shadow-sm whitespace-nowrap">
+                            {item.durationText}
+                          </div>
+                          {!isSelectionMode && (
+                            <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="p-2 text-gray-300 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors active:scale-90">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            </button>
+                          )}
+                        </div>
+                    </div>
+
+                    {/* Expand Detail Segmen/Jeda */}
+                    {expandedId === item.id && hasSegments && (
+                       <div className="mt-4 pt-4 border-t border-dashed border-gray-200 animate-in fade-in slide-in-from-top-2">
+                           <p className="text-xs font-bold text-gray-500 mb-3 ml-1">Detail Sesi (Jeda tidak dihitung):</p>
+                           <div className="space-y-2 relative before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-gray-100">
+                             {item.segments.map((seg, i) => (
+                                <React.Fragment key={i}>
+                                   <div className="flex items-center relative z-10">
+                                      <div className="w-6 h-6 rounded-full bg-orange-100 border-2 border-white flex items-center justify-center text-orange-600 font-bold text-[10px] shadow-sm mr-3">
+                                         {i+1}
+                                      </div>
+                                      <div className="flex-1 bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
+                                         <span className="text-gray-700 font-bold text-xs">{seg.start} - {seg.end}</span>
+                                         <span className="text-orange-600 font-black text-xs">{seg.rawMinutes} mnt</span>
+                                      </div>
+                                   </div>
+                                   {i < item.segments.length - 1 && (
+                                      <div className="flex items-center relative z-10 ml-[26px] my-1">
+                                         <div className="bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            Jeda {calculateDurationInfo(seg.end, item.segments[i+1].start).rawMinutes} mnt
+                                         </div>
+                                      </div>
+                                   )}
+                                </React.Fragment>
+                             ))}
+                           </div>
                        </div>
                     )}
 
-                    <div className="flex-1 pr-4">
-                      <p className="font-bold text-gray-800 text-lg break-words">
-                        {item.activity}
-                        {hasSegments && (
-                           <span className="inline-block ml-2 align-middle text-gray-300">
-                               <svg className={`w-5 h-5 transform transition-transform ${expandedId === item.id ? 'rotate-180 text-orange-500' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                           </span>
-                        )}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <p className="text-xs font-medium text-gray-400">{item.date} • {item.startTime} - {item.endTime}</p>
-                        {item.category && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{item.category}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full text-sm font-extrabold shadow-sm whitespace-nowrap">
-                        {item.durationText}
-                      </div>
-                      {!isSelectionMode && (
-                        <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="p-2 text-gray-300 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors active:scale-90">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                        </button>
-                      )}
-                    </div>
-                </div>
+                  </div>
+                  );
+                })
+              )}
+            </div>
+          )}
 
-                {/* Expand Detail Segmen/Jeda */}
-                {expandedId === item.id && hasSegments && (
-                   <div className="mt-4 pt-4 border-t border-dashed border-gray-200 animate-in fade-in slide-in-from-top-2">
-                       <div className="flex justify-between items-center mb-3 ml-1">
-                          <p className="text-xs font-bold text-gray-500">Detail Sesi (Jeda tidak dihitung):</p>
-                       </div>
-                       <div className="space-y-2 relative before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-gray-100">
-                         {item.segments.map((seg, i) => (
-                            <React.Fragment key={i}>
-                               <div className="flex items-center relative z-10">
-                                  <div className="w-6 h-6 rounded-full bg-orange-100 border-2 border-white flex items-center justify-center text-orange-600 font-bold text-[10px] shadow-sm mr-3">
-                                     {i+1}
-                                  </div>
-                                  <div className="flex-1 bg-gray-50 p-2.5 rounded-xl flex justify-between items-center border border-gray-100">
-                                     <div>
-                                       <span className="text-gray-700 font-bold text-xs">{seg.start} - {seg.end}</span>
-                                       <span className="text-orange-600 font-black text-xs ml-2">{seg.rawMinutes} mnt</span>
-                                     </div>
-                                     <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteSegment(item, i); }}
-                                        className="text-red-400 hover:text-red-600 bg-white shadow-sm border border-red-100 rounded-md p-1.5 active:scale-95 transition-all"
-                                        title="Hapus Sesi"
-                                     >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                     </button>
-                                  </div>
-                               </div>
-                               {i < item.segments.length - 1 && (
-                                  <div className="flex items-center relative z-10 ml-[26px] my-1">
-                                     <div className="bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        Jeda {calculateDurationInfo(seg.end, item.segments[i+1].start).rawMinutes} mnt
-                                     </div>
-                                  </div>
-                               )}
-                            </React.Fragment>
-                         ))}
-                       </div>
-                   </div>
-                )}
-
+          {activeTab === 'stats' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Statistik</h2>
+                <select 
+                  className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                >
+                  <option value="all">Semua Waktu</option>
+                  <option value="today">Hari Ini</option>
+                  <option value="custom">Pilih Tanggal...</option>
+                </select>
               </div>
-              );
-            })
-          )}
-        </div>
-      )}
 
-      {activeTab === 'stats' && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Statistik</h2>
-            <select 
-              className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-            >
-              <option value="all">Semua Waktu</option>
-              <option value="today">Hari Ini</option>
-              <option value="custom">Pilih Tanggal...</option>
-            </select>
-          </div>
-
-          {dateFilter === 'custom' && (
-            <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-              <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
-              <span className="self-center text-gray-400 font-bold">-</span>
-              <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
-            </div>
-          )}
-          
-          <div className="bg-gradient-to-br from-orange-500 to-orange-400 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
-               <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-            </div>
-            <p className="text-orange-100 text-sm font-medium relative z-10">Total Waktu Aktivitas</p>
-            <p className="text-3xl font-black mt-1 relative z-10">{totalDurationText}</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
-            <div>
-              <p className="text-gray-400 text-sm font-medium">Total Sesi Aktivitas</p>
-              <p className="text-2xl font-black text-gray-800 mt-1">{filteredData.length} Sesi</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-800 mb-5">Rincian Berdasarkan Kategori</h3>
-            <div className="space-y-5">
-              {Object.entries(categoryStats)
-                .sort((a,b) => b[1] - a[1])
-                .map(([cat, mins]) => {
-                const h = Math.floor(mins / 60);
-                const m = mins % 60;
-                const percent = totalMinutesAll > 0 ? (mins / totalMinutesAll) * 100 : 0;
-                return (
-                  <div key={cat}>
-                    <div className="flex justify-between text-sm font-bold text-gray-600 mb-2">
-                      <span>{cat}</span>
-                      <span className="text-orange-500">{h > 0 ? `${h}j ` : ''}{m}m</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                      <div className="bg-orange-500 h-full rounded-full transition-all duration-500" style={{ width: `${percent}%` }}></div>
-                    </div>
-                  </div>
-                );
-              })}
-              {Object.keys(categoryStats).length === 0 && <p className="text-sm text-gray-400 italic">Belum ada data kategori untuk ditampilkan.</p>}
-            </div>
-          </div>
-
-          <div className="mt-8 space-y-3 pt-6 border-t border-gray-200">
-            <h3 className="font-bold text-gray-800">Manajemen Data</h3>
-            <div className="flex gap-3">
-              <button onClick={handleExport} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Ekspor
-              </button>
-              <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                Impor
-              </button>
-              <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
-            </div>
-            <p className="text-[10px] text-gray-400 text-center px-4 mt-2">Data Anda tersimpan secara aman di sistem awan (Cloud). Anda dapat mengekspor atau mengimpor salinan arsip di sini.</p>
-          </div>
-        </div>
-      )}
-    </div>
-
-    {!isSelectionMode ? (
-      <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
-        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-400'}`}>
-          <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-          <span className="text-[10px] font-bold">Beranda</span>
-        </button>
-
-        <button onClick={() => setIsModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(249,115,22,0.4)] transform -translate-y-7 transition-transform active:scale-95">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
-        </button>
-
-        <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-400'}`}>
-          <svg className="w-6 h-6" fill={activeTab === 'stats' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-          <span className="text-[10px] font-bold">Statistik</span>
-        </button>
-      </nav>
-    ) : (
-      <div className="fixed bottom-0 w-full max-w-md bg-gray-900 border-t border-gray-800 px-6 py-6 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl animate-in slide-in-from-bottom-5">
-        <button onClick={() => {setIsSelectionMode(false); setSelectedItems([]);}} className="text-gray-300 hover:text-white font-bold text-sm px-2">Batal</button>
-        <span className="text-white font-extrabold">{selectedItems.length} Terpilih</span>
-        <div className="flex gap-5">
-          <button onClick={() => setCategoryModalOpen(true)} disabled={selectedItems.length === 0} className="text-blue-400 hover:text-blue-300 disabled:opacity-50">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
-          </button>
-          <button onClick={handleBulkDelete} disabled={selectedItems.length === 0} className="text-red-500 hover:text-red-400 disabled:opacity-50">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-          </button>
-        </div>
-      </div>
-    )}
-
-    {isModalOpen && (
-      <div className="absolute inset-0 bg-gray-900/40 z-50 flex items-end justify-center backdrop-blur-sm">
-        <div className="bg-white w-full h-[75%] rounded-t-[32px] p-6 flex flex-col shadow-2xl animate-in slide-in-from-bottom-full duration-300">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-extrabold text-gray-800">Tambah Data</h3>
-            <button onClick={() => setIsModalOpen(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-          </div>
-          
-          <div className="flex-1 flex flex-col mb-4">
-            <label className="text-sm font-bold text-gray-600 mb-2">Tempel (Paste) Chat WhatsApp</label>
-            <textarea 
-              className="flex-1 w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-mono focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none placeholder-gray-300"
-              placeholder="[7/5, 09.34] Me: Olahraga&#10;[7/5, 09.48] Me: ..&#10;[7/5, 10.11] Me: ...&#10;[7/5, 10.18] Me: ."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-            ></textarea>
-          </div>
-
-          <button onClick={handleParse} className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white text-lg font-bold rounded-2xl shadow-lg transition-colors active:scale-[0.98]">
-            Proses & Simpan
-          </button>
-        </div>
-      </div>
-    )}
-
-    {editingItem && (
-      <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-          <h3 className="text-xl font-extrabold text-gray-800 mb-5">Edit Aktivitas</h3>
-          
-          <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Aktivitas</label>
-          <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-            value={editingItem.activity} onChange={e => setEditingItem({...editingItem, activity: e.target.value})} />
-          
-          <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Kategori (Ketik atau Pilih)</label>
-          <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-            value={editingItem.category || ''} placeholder="Misal: Produktif" onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
-          
-          {/* PENGECEKAN MULTI-SESI UNTUK MENGUNCI WAKTU */}
-          {(() => {
-            const isLocked = editingItem.segments && editingItem.segments.length > 1;
-            return (
-              <>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
-                    <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                      value={editingItem.date} onChange={e => setEditingItem({...editingItem, date: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
-                    <input className={`w-full border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium ${isLocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50'}`} 
-                      value={editingItem.startTime} onChange={e => setEditingItem({...editingItem, startTime: e.target.value})} disabled={isLocked} />
-                  </div>
+              {dateFilter === 'custom' && (
+                <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <span className="self-center text-gray-400 font-bold">-</span>
+                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
                 </div>
-                
-                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
-                <input className={`w-full border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium ${isLocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50'}`}
-                  value={editingItem.endTime} onChange={e => setEditingItem({...editingItem, endTime: e.target.value})} disabled={isLocked} />
+              )}
+              
+              <div className="bg-gradient-to-br from-orange-500 to-orange-400 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
+                   <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                </div>
+                <p className="text-orange-100 text-sm font-medium relative z-10">Total Waktu Aktivitas</p>
+                <p className="text-3xl font-black mt-1 relative z-10">{totalDurationText}</p>
+              </div>
 
-                {isLocked ? (
-                  <p className="text-[10px] text-red-500 italic mb-4 ml-1">*Waktu utama dikunci karena aktivitas memiliki lebih dari 1 sesi. Silakan hapus sesi yang tidak valid di beranda.</p>
-                ) : (
-                  <div className="mb-6"></div>
-                )}
-              </>
-            );
-          })()}
+              <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div>
+                  <p className="text-gray-400 text-sm font-medium">Total Sesi Aktivitas</p>
+                  <p className="text-2xl font-black text-gray-800 mt-1">{filteredData.length} Sesi</p>
+                </div>
+                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                </div>
+              </div>
 
-          <div className="flex gap-3 mb-4">
-            <button onClick={() => setEditingItem(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
-            <button onClick={handleSaveEdit} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan</button>
-          </div>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-800 mb-5">Rincian Berdasarkan Kategori</h3>
+                <div className="space-y-5">
+                  {Object.entries(categoryStats)
+                    .sort((a,b) => b[1] - a[1])
+                    .map(([cat, mins]) => {
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    const percent = totalMinutesAll > 0 ? (mins / totalMinutesAll) * 100 : 0;
+                    return (
+                      <div key={cat}>
+                        <div className="flex justify-between text-sm font-bold text-gray-600 mb-2">
+                          <span>{cat}</span>
+                          <span className="text-orange-500">{h > 0 ? `${h}j ` : ''}{m}m</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-orange-500 h-full rounded-full transition-all duration-500" style={{ width: `${percent}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.keys(categoryStats).length === 0 && <p className="text-sm text-gray-400 italic">Belum ada data kategori untuk ditampilkan.</p>}
+                </div>
+              </div>
 
-          <div className="border-t border-gray-100 pt-3">
-            <button onClick={handleDelete} className="w-full text-red-500 hover:bg-red-50 font-bold py-3 rounded-2xl transition-colors">Hapus Aktivitas</button>
-          </div>
+              <div className="mt-8 space-y-3 pt-6 border-t border-gray-200">
+                <h3 className="font-bold text-gray-800">Manajemen Data</h3>
+                <div className="flex gap-3">
+                  <button onClick={handleExport} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Ekspor
+                  </button>
+                  <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Impor
+                  </button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
+                </div>
+                <p className="text-[10px] text-gray-400 text-center px-4 mt-2">Data Anda tersimpan secara aman di sistem awan (Cloud). Anda dapat mengekspor atau mengimpor salinan arsip di sini.</p>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-    )}
 
-    {categoryModalOpen && (
-      <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-           <h3 className="text-xl font-extrabold text-gray-800 mb-2">Tetapkan Kategori</h3>
-           <p className="text-xs text-gray-500 mb-5">Terapkan ke {selectedItems.length} aktivitas yang dipilih.</p>
+        {!isSelectionMode ? (
+          <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
+            <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-400'}`}>
+              <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+              <span className="text-[10px] font-bold">Beranda</span>
+            </button>
 
-           <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-6 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-            value={bulkCategory} placeholder="Ketik atau pilih kategori..." onChange={e => setBulkCategory(e.target.value)} />
-           
-           <div className="flex gap-3">
-            <button onClick={() => setCategoryModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
-            <button onClick={handleBulkCategory} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan Kategori</button>
+            <button onClick={() => setIsModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(249,115,22,0.4)] transform -translate-y-7 transition-transform active:scale-95">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
+            </button>
+
+            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-400'}`}>
+              <svg className="w-6 h-6" fill={activeTab === 'stats' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              <span className="text-[10px] font-bold">Statistik</span>
+            </button>
+          </nav>
+        ) : (
+          <div className="fixed bottom-0 w-full max-w-md bg-gray-900 border-t border-gray-800 px-6 py-6 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl animate-in slide-in-from-bottom-5">
+            <button onClick={() => {setIsSelectionMode(false); setSelectedItems([]);}} className="text-gray-300 hover:text-white font-bold text-sm px-2">Batal</button>
+            <span className="text-white font-extrabold">{selectedItems.length} Terpilih</span>
+            <div className="flex gap-5">
+              <button onClick={() => setCategoryModalOpen(true)} disabled={selectedItems.length === 0} className="text-blue-400 hover:text-blue-300 disabled:opacity-50">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+              </button>
+              <button onClick={handleBulkDelete} disabled={selectedItems.length === 0} className="text-red-500 hover:text-red-400 disabled:opacity-50">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {isModalOpen && (
+          <div className="absolute inset-0 bg-gray-900/40 z-50 flex items-end justify-center backdrop-blur-sm">
+            <div className="bg-white w-full h-[75%] rounded-t-[32px] p-6 flex flex-col shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-extrabold text-gray-800">Tambah Data</h3>
+                <button onClick={() => setIsModalOpen(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              </div>
+              
+              <div className="flex-1 flex flex-col mb-4">
+                <label className="text-sm font-bold text-gray-600 mb-2">Tempel (Paste) Chat WhatsApp</label>
+                <textarea 
+                  className="flex-1 w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-mono focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none placeholder-gray-300"
+                  placeholder="[7/5, 09.34] Me: Olahraga&#10;[7/5, 09.48] Me: ..&#10;[7/5, 10.11] Me: ...&#10;[7/5, 10.18] Me: ."
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                ></textarea>
+              </div>
+
+              <button onClick={handleParse} className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white text-lg font-bold rounded-2xl shadow-lg transition-colors active:scale-[0.98]">
+                Proses & Simpan
+              </button>
+            </div>
+          </div>
+        )}
+
+        {editingItem && (
+          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <h3 className="text-xl font-extrabold text-gray-800 mb-5">Edit Aktivitas</h3>
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Aktivitas</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={editingItem.activity} onChange={e => setEditingItem({...editingItem, activity: e.target.value})} />
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Kategori (Ketik atau Pilih)</label>
+              <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={editingItem.category || ''} placeholder="Misal: Produktif" onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                    value={editingItem.date} onChange={e => setEditingItem({...editingItem, date: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                    value={editingItem.startTime} onChange={e => setEditingItem({...editingItem, startTime: e.target.value})} />
+                </div>
+              </div>
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={editingItem.endTime} onChange={e => setEditingItem({...editingItem, endTime: e.target.value})} />
+
+              {editingItem.segments && editingItem.segments.length > 1 && (
+                 <p className="text-[10px] text-orange-500 italic mb-4 ml-1">*Catatan: Mengedit jam pada aktivitas ber-jeda akan menyatukan sesi.</p>
+              )}
+              {!(editingItem.segments && editingItem.segments.length > 1) && <div className="mb-6"></div>}
+
+              <div className="flex gap-3 mb-4">
+                <button onClick={() => setEditingItem(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
+                <button onClick={handleSaveEdit} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan</button>
+              </div>
+
+              <div className="border-t border-gray-100 pt-3">
+                <button onClick={handleDelete} className="w-full text-red-500 hover:bg-red-50 font-bold py-3 rounded-2xl transition-colors">Hapus Aktivitas</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {categoryModalOpen && (
+          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+               <h3 className="text-xl font-extrabold text-gray-800 mb-2">Tetapkan Kategori</h3>
+               <p className="text-xs text-gray-500 mb-5">Terapkan ke {selectedItems.length} aktivitas yang dipilih.</p>
+
+               <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-6 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={bulkCategory} placeholder="Ketik atau pilih kategori..." onChange={e => setBulkCategory(e.target.value)} />
+               
+               <div className="flex gap-3">
+                <button onClick={() => setCategoryModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
+                <button onClick={handleBulkCategory} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan Kategori</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <datalist id="category-list">
+          {availableCategories.map(c => <option key={c} value={c} />)}
+        </datalist>
+
       </div>
-    )}
-
-    <datalist id="category-list">
-      {availableCategories.map(c => <option key={c} value={c} />)}
-    </datalist>
-
-  </div>
-</div>
-);}
+    </div>
+  );
+}
