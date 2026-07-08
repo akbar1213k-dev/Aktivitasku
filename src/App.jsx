@@ -45,7 +45,14 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
-  
+  // --- STATE UNTUK TEMA ---
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('themeMode') === 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('themeMode', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
   // --- STATE UNTUK LOGIN ---
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
@@ -656,8 +663,8 @@ export default function App() {
   }, {});
 
   return (
-    <div className="flex justify-center bg-gray-200 min-h-screen font-sans">
-      <div className="w-full max-w-md bg-gray-50 min-h-screen relative flex flex-col shadow-2xl">
+    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
+      <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
         
         {toast && (
           <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
@@ -814,14 +821,39 @@ export default function App() {
                 <p className="text-3xl font-black mt-1 relative z-10">{totalDurationText}</p>
               </div>
 
-              <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
+              <div className={`p-5 rounded-3xl shadow-sm border flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Total Sesi Aktivitas</p>
-                  <p className="text-2xl font-black text-gray-800 mt-1">{filteredData.length} Sesi</p>
+                  <p className={`text-2xl font-black mt-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{filteredData.length} Sesi</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                 </div>
+              </div>
+              {/* --- STATISTIK KATEGORI --- */}
+              <div className="mt-6 space-y-4">
+                <h3 className={`text-lg font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Statistik per Kategori</h3>
+                {Object.entries(categoryStats)
+                  .sort((a, b) => b[1] - a[1]) // Urutkan durasi dari yang terlama
+                  .map(([cat, mins]) => {
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    const timeTxt = h > 0 ? `${h}j ${m}m` : `${m}m`;
+                    const pct = totalMinutesAll > 0 ? Math.round((mins / totalMinutesAll) * 100) : 0;
+                    
+                    return (
+                      <div key={cat} className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-bold text-sm">{cat}</span>
+                          <span className="text-orange-500 font-black text-sm">{timeTxt}</span>
+                        </div>
+                        <div className={`w-full rounded-full h-2.5 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <div className="bg-orange-500 h-2.5 rounded-full" style={{width: `${pct}%`}}></div>
+                        </div>
+                        <p className="text-right text-[10px] mt-1 text-gray-400">{pct}% dari total waktu</p>
+                      </div>
+                    );
+                })}
               </div>
               
           </div>
@@ -829,9 +861,30 @@ export default function App() {
 
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Pengaturan Akun</h2>
+              <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Pengaturan</h2>
+
+              {/* --- TOGGLE MODE GELAP --- */}
+              <div className={`p-5 rounded-3xl shadow-sm border mb-6 flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700 text-yellow-400' : 'bg-blue-50 text-blue-500'}`}>
+                    {isDarkMode ? (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    ) : (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Mode Tampilan</h3>
+                    <p className="text-xs text-gray-400 font-medium">{isDarkMode ? 'Mode Gelap Aktif' : 'Mode Terang Aktif'}</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={isDarkMode} onChange={() => setIsDarkMode(!isDarkMode)} />
+                  <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
               
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+              <div className={`p-6 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 shadow-sm">
                     <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
