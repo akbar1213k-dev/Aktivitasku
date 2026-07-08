@@ -615,107 +615,106 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-gray-800 mb-5">Rincian Berdasarkan Kategori</h3>
-                <div className="space-y-5">
-                  {Object.entries(categoryStats)
-                    .sort((a,b) => b[1] - a[1])
-                    .map(([cat, mins]) => {
-                    const h = Math.floor(mins / 60);
-                    const m = mins % 60;
-                    const percent = totalMinutesAll > 0 ? (mins / totalMinutesAll) * 100 : 0;
-                    return (
-                      <div key={cat}>
-                        <div className="flex justify-between text-sm font-bold text-gray-600 mb-2">
-                          <span>{cat}</span>
-                          <span className="text-orange-500">{h > 0 ? `${h}j ` : ''}{m}m</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                          <div className="bg-orange-500 h-full rounded-full transition-all duration-500" style={{ width: `${percent}%` }}></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {Object.keys(categoryStats).length === 0 && <p className="text-sm text-gray-400 italic">Belum ada data kategori untuk ditampilkan.</p>}
+              {editingItem && (
+          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <h3 className="text-xl font-extrabold text-gray-800 mb-5">Edit Aktivitas</h3>
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Aktivitas</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={editingItem.activity} onChange={e => setEditingItem({...editingItem, activity: e.target.value})} />
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Kategori (Ketik atau Pilih)</label>
+              <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                value={editingItem.category || ''} placeholder="Misal: Produktif" onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                    value={editingItem.date} onChange={e => setEditingItem({...editingItem, date: e.target.value})} />
                 </div>
-              </div>
-
-              <div className="mt-8 space-y-3 pt-6 border-t border-gray-200">
-                <h3 className="font-bold text-gray-800">Manajemen Data</h3>
-                <div className="flex gap-3">
-                  <button onClick={handleExport} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Ekspor
-                  </button>
-                  <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-gray-50 active:scale-95 transition-transform">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    Impor
-                  </button>
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                    value={editingItem.startTime} 
+                    disabled={editingItem.segments && editingItem.segments.length > 1}
+                    onChange={e => {
+                      const updated = {...editingItem, startTime: e.target.value};
+                      if (updated.segments && updated.segments.length === 1) {
+                         updated.segments[0].start = e.target.value;
+                      }
+                      setEditingItem(updated);
+                    }} />
                 </div>
-                <p className="text-[10px] text-gray-400 text-center px-4 mt-2">Data Anda tersimpan secara aman di sistem awan (Cloud). Anda dapat mengekspor atau mengimpor salinan arsip di sini.</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {!isSelectionMode ? (
-          <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
-            <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-400'}`}>
-              <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-              <span className="text-[10px] font-bold">Beranda</span>
-            </button>
-
-            <button onClick={() => setIsModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(249,115,22,0.4)] transform -translate-y-7 transition-transform active:scale-95">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
-            </button>
-
-            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-400'}`}>
-              <svg className="w-6 h-6" fill={activeTab === 'stats' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-              <span className="text-[10px] font-bold">Statistik</span>
-            </button>
-          </nav>
-        ) : (
-          <div className="fixed bottom-0 w-full max-w-md bg-gray-900 border-t border-gray-800 px-6 py-6 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl animate-in slide-in-from-bottom-5">
-            <button onClick={() => {setIsSelectionMode(false); setSelectedItems([]);}} className="text-gray-300 hover:text-white font-bold text-sm px-2">Batal</button>
-            <span className="text-white font-extrabold">{selectedItems.length} Terpilih</span>
-            <div className="flex gap-5">
-              <button onClick={() => setCategoryModalOpen(true)} disabled={selectedItems.length === 0} className="text-blue-400 hover:text-blue-300 disabled:opacity-50">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
-              </button>
-              <button onClick={handleBulkDelete} disabled={selectedItems.length === 0} className="text-red-500 hover:text-red-400 disabled:opacity-50">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isModalOpen && (
-          <div className="absolute inset-0 bg-gray-900/40 z-50 flex items-end justify-center backdrop-blur-sm">
-            <div className="bg-white w-full h-[75%] rounded-t-[32px] p-6 flex flex-col shadow-2xl animate-in slide-in-from-bottom-full duration-300">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-extrabold text-gray-800">Tambah Data</h3>
-                <button onClick={() => setIsModalOpen(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
               </div>
               
-              <div className="flex-1 flex flex-col mb-4">
-                <label className="text-sm font-bold text-gray-600 mb-2">Tempel (Paste) Chat WhatsApp</label>
-                <textarea 
-                  className="flex-1 w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-mono focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none placeholder-gray-300"
-                  placeholder="[7/5, 09.34] Me: Olahraga&#10;[7/5, 09.48] Me: ..&#10;[7/5, 10.11] Me: ...&#10;[7/5, 10.18] Me: ."
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                ></textarea>
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                value={editingItem.endTime} 
+                disabled={editingItem.segments && editingItem.segments.length > 1}
+                onChange={e => {
+                  const updated = {...editingItem, endTime: e.target.value};
+                  if (updated.segments && updated.segments.length === 1) {
+                     updated.segments[0].end = e.target.value;
+                  }
+                  setEditingItem(updated);
+                }} />
+
+              {editingItem.segments && editingItem.segments.length > 1 ? (
+                 <div className="mb-4 mt-2 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+                    <p className="text-xs font-bold text-orange-600 mb-2">Edit Waktu Per Sesi</p>
+                    {editingItem.segments.map((seg, i) => (
+                      <div key={i} className="flex gap-2 mb-2 items-center">
+                        <input className="w-full bg-white border border-gray-200 p-2 rounded-xl text-xs outline-none font-medium" value={seg.start} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].start = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            startTime: newSegs[0].start
+                          });
+                        }} />
+                        <span className="text-gray-400 font-bold">-</span>
+                        <input className="w-full bg-white border border-gray-200 p-2 rounded-xl text-xs outline-none font-medium" value={seg.end} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].end = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            endTime: newSegs[newSegs.length - 1].end
+                          });
+                        }} />
+                        <button className="text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
+                          if (editingItem.segments.length <= 1) return;
+                          const newSegs = editingItem.segments.filter((_, idx) => idx !== i);
+                          setEditingItem({
+                             ...editingItem, 
+                             segments: newSegs,
+                             startTime: newSegs.length > 0 ? newSegs[0].start : editingItem.startTime,
+                             endTime: newSegs.length > 0 ? newSegs[newSegs.length - 1].end : editingItem.endTime
+                          });
+                        }}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                      </div>
+                    ))}
+                 </div>
+              ) : (
+                <div className="mb-6"></div>
+              )}
+
+              <div className="flex gap-3 mb-4">
+                <button onClick={() => setEditingItem(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
+                <button onClick={handleSaveEdit} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan</button>
               </div>
 
-              <button onClick={handleParse} className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white text-lg font-bold rounded-2xl shadow-lg transition-colors active:scale-[0.98]">
-                Proses & Simpan
-              </button>
+              <div className="border-t border-gray-100 pt-3">
+                <button onClick={handleDelete} className="w-full text-red-500 hover:bg-red-50 font-bold py-3 rounded-2xl transition-colors">Hapus Aktivitas</button>
+              </div>
             </div>
           </div>
-        )}
+        
 
         {editingItem && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -738,10 +737,73 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
-                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                    value={editingItem.startTime} onChange={e => setEditingItem({...editingItem, startTime: e.target.value})} />
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                    value={editingItem.startTime} 
+                    disabled={editingItem.segments && editingItem.segments.length > 1}
+                    onChange={e => {
+                      const updated = {...editingItem, startTime: e.target.value};
+                      if (updated.segments && updated.segments.length === 1) {
+                         updated.segments[0].start = e.target.value;
+                      }
+                      setEditingItem(updated);
+                    }} />
                 </div>
               </div>
+              
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                value={editingItem.endTime} 
+                disabled={editingItem.segments && editingItem.segments.length > 1}
+                onChange={e => {
+                  const updated = {...editingItem, endTime: e.target.value};
+                  if (updated.segments && updated.segments.length === 1) {
+                     updated.segments[0].end = e.target.value;
+                  }
+                  setEditingItem(updated);
+                }} />
+
+              {editingItem.segments && editingItem.segments.length > 1 ? (
+                 <div className="mb-4 mt-2 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+                    <p className="text-xs font-bold text-orange-600 mb-2">Edit Waktu Per Sesi</p>
+                    {editingItem.segments.map((seg, i) => (
+                      <div key={i} className="flex gap-2 mb-2 items-center">
+                        <input className="w-full bg-white border border-gray-200 p-2 rounded-xl text-xs outline-none font-medium" value={seg.start} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].start = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            startTime: newSegs[0].start
+                          });
+                        }} />
+                        <span className="text-gray-400 font-bold">-</span>
+                        <input className="w-full bg-white border border-gray-200 p-2 rounded-xl text-xs outline-none font-medium" value={seg.end} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].end = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            endTime: newSegs[newSegs.length - 1].end
+                          });
+                        }} />
+                        <button className="text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
+                          if (editingItem.segments.length <= 1) return;
+                          const newSegs = editingItem.segments.filter((_, idx) => idx !== i);
+                          setEditingItem({
+                             ...editingItem, 
+                             segments: newSegs,
+                             startTime: newSegs.length > 0 ? newSegs[0].start : editingItem.startTime,
+                             endTime: newSegs.length > 0 ? newSegs[newSegs.length - 1].end : editingItem.endTime
+                          });
+                        }}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                      </div>
+                    ))}
+                 </div>
+              ) : (
+                <div className="mb-6"></div>
+              )}
               
               <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
               <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
