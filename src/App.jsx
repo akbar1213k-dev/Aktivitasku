@@ -29,7 +29,15 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
   const [inputText, setInputText] = useState('');
-  const [parsedData, setParsedData] = useState([]);
+  const [parsedData, setParsedData] = useState(() => {
+    // Membaca cache lokal jika Firebase offline atau belum termuat
+    try {
+      const savedData = localStorage.getItem('offline_activities');
+      return savedData ? JSON.parse(savedData) : [];
+    } catch (error) {
+      return [];
+    }
+  });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
@@ -46,6 +54,10 @@ export default function App() {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
   const [expandedId, setExpandedId] = useState(null); // Menyimpan ID aktivitas yang sedang diklik untuk melihat detail
+  // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
+  useEffect(() => {
+    localStorage.setItem('offline_activities', JSON.stringify(parsedData));
+  }, [parsedData]);
 
   useEffect(() => {
     if (!auth) return;
