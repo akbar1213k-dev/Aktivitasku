@@ -965,8 +965,12 @@ export default function App() {
               <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
                 value={editingItem.category || ''} placeholder="Misal: Produktif" onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
               
-              {/* --- GRID JAM MULAI & SELESAI --- */}
               <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                    value={editingItem.date} onChange={e => setEditingItem({...editingItem, date: e.target.value})} />
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
                   <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
@@ -974,33 +978,26 @@ export default function App() {
                     disabled={editingItem.segments && editingItem.segments.length > 1}
                     onChange={e => {
                       const updated = {...editingItem, startTime: e.target.value};
-                      if (updated.segments && updated.segments.length === 1) updated.segments[0].start = e.target.value;
+                      if (updated.segments && updated.segments.length === 1) {
+                         updated.segments[0].start = e.target.value;
+                      }
                       setEditingItem(updated);
                     }} />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
-                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
-                    value={editingItem.endTime} 
-                    disabled={editingItem.segments && editingItem.segments.length > 1}
-                    onChange={e => {
-                      const updated = {...editingItem, endTime: e.target.value};
-                      if (updated.segments && updated.segments.length === 1) updated.segments[0].end = e.target.value;
-                      setEditingItem(updated);
-                    }} />
-                </div>
-              </div>
-
-              {/* --- KOLOM TANGGAL SELESAI (Perbedaan Hari) --- */}
-              <div className="mb-4">
-                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal Selesai</label>
-                <input type="date" 
-                  className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                  value={editingItem.endDate || editingItem.date} 
-                  onChange={e => setEditingItem({...editingItem, endDate: e.target.value})} 
-                />
               </div>
               
+              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
+              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                value={editingItem.endTime} 
+                disabled={editingItem.segments && editingItem.segments.length > 1}
+                onChange={e => {
+                  const updated = {...editingItem, endTime: e.target.value};
+                  if (updated.segments && updated.segments.length === 1) {
+                     updated.segments[0].end = e.target.value;
+                  }
+                  setEditingItem(updated);
+                }} />
+
               {editingItem.segments && editingItem.segments.length > 1 ? (
                  <div className="mb-4 mt-2 bg-orange-50 p-3 rounded-2xl border border-orange-100">
                     <p className="text-xs font-bold text-orange-600 mb-2">Edit Waktu Per Sesi</p>
