@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
+  GoogleAuthProvider, signInWithPopup, signOut,
+  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
+  RecaptchaVerifier, signInWithPhoneNumber
+} from 'firebase/auth';import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Inisialisasi Firebase
 // KODE BARU:
@@ -42,6 +46,13 @@ export default function App() {
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
   
+  // --- STATE UNTUK LOGIN ---
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [isSendingLink, setIsSendingLink] = useState(false);
+
   const fileInputRef = useRef(null);
   const pressTimer = useRef(null);
 
@@ -61,18 +72,26 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
+
+    // Mengecek apakah user masuk dari link email
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let emailForSignIn = window.localStorage.getItem('emailForSignIn');
+      if (!emailForSignIn) {
+        emailForSignIn = window.prompt('Silakan masukkan email Anda untuk konfirmasi login:');
       }
-    };
-    initAuth();
+      if (emailForSignIn) {
+        signInWithEmailLink(auth, emailForSignIn, window.location.href)
+          .then(() => {
+            window.localStorage.removeItem('emailForSignIn');
+            showToast('Berhasil Login dengan Email!');
+            window.history.replaceState(null, '', window.location.pathname); // bersihkan URL
+          })
+          .catch((error) => {
+            showToast('Gagal verifikasi email: ' + error.message);
+          });
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
@@ -95,9 +114,76 @@ export default function App() {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      showToast('Berhasil Login!');
+      showToast('Berhasil Login dengan Google!');
     } catch(e) {
-      showToast('Gagal Login. Cek koneksi Anda.');
+      if(e.code === 'auth/popup-closed-by-user') {
+         showToast('Popup ditutup sebelum login selesai.');
+      } else {
+         showToast('Gagal Login: ' + e.message);
+      }
+    }
+  };
+
+  const handleLoginEmailLink = async () => {
+    if (!auth) return showToast('Sistem Cloud belum siap.');
+    if (!loginEmail) return showToast('Masukkan alamat email.');
+    
+    setIsSendingLink(true);
+    const actionCodeSettings = {
+      url: window.location.href, // Akan mengarah kembali ke web ini
+      handleCodeInApp: true,
+    };
+
+    try {
+      await sendSignInLinkToEmail(auth, loginEmail, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', loginEmail);
+      showToast('Tautan login telah dikirim ke email Anda!');
+      setLoginEmail('');
+    } catch (e) {
+      showToast('Gagal mengirim tautan: ' + e.message);
+    } finally {
+      setIsSendingLink(false);
+    }
+  };
+
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible'
+      });
+    }
+  };
+
+  const handleSendOTP = async () => {
+    if (!auth) return showToast('Sistem Cloud belum siap.');
+    if (!loginPhone.startsWith('+')) return showToast('Gunakan kode negara (contoh: +628...)');
+    
+    setupRecaptcha();
+    const appVerifier = window.recaptchaVerifier;
+
+    try {
+      const result = await signInWithPhoneNumber(auth, loginPhone, appVerifier);
+      setConfirmationResult(result);
+      showToast('Kode OTP telah dikirim via SMS/WA!');
+    } catch (e) {
+      showToast('Gagal mengirim OTP: ' + e.message);
+      if (window.recaptchaVerifier) {
+         window.recaptchaVerifier.clear();
+         window.recaptchaVerifier = null;
+      }
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpCode || !confirmationResult) return;
+    try {
+      await confirmationResult.confirm(otpCode);
+      showToast('Berhasil Login dengan Telepon!');
+      setConfirmationResult(null);
+      setOtpCode('');
+      setLoginPhone('');
+    } catch (e) {
+      showToast('Kode OTP salah atau kedaluwarsa.');
     }
   };
 
@@ -743,7 +829,7 @@ export default function App() {
 
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">Pengaturan</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Pengaturan Akun</h2>
               
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-4 mb-6">
@@ -752,25 +838,62 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-800 text-lg">
-                      {user && !user.isAnonymous ? (user.displayName || 'Pengguna Cloud') : 'Mode Lokal'}
+                      {user && !user.isAnonymous ? (user.displayName || user.phoneNumber || 'Pengguna Cloud') : 'Mode Lokal'}
                     </h3>
                     <p className="text-xs text-gray-400 font-medium">
-                      {user && !user.isAnonymous ? user.email : 'Belum terhubung ke Awan'}
+                      {user && !user.isAnonymous ? (user.email || 'Terhubung via Telepon') : 'Data tidak disinkronisasi'}
                     </p>
                   </div>
                 </div>
 
                 {user && !user.isAnonymous ? (
                   <button onClick={handleLogout} className="w-full bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3.5 rounded-2xl transition-colors">
-                    Keluar dari Cloud
+                    Keluar dari Akun
                   </button>
                 ) : (
-                  <div className="space-y-3">
-                    <p className="text-xs text-gray-500 font-medium mb-4">Login dengan Google untuk menyimpan dan mensinkronkan aktivitas Anda secara permanen antar perangkat.</p>
-                    <button onClick={handleLoginGoogle} className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 transition-colors">
-                      <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h5.51c-.18 1.09-1.01 2.94-2.76 4.11l4.28 3.32c2.51-2.31 3.96-5.71 3.96-9.52 0-.91-.13-1.74-.35-2.52z"></path><path fill="currentColor" d="M12.18 21.07c2.61 0 4.81-.86 6.41-2.33l-4.28-3.32c-.81.56-1.93.94-3.32.94-2.61 0-4.87-1.73-5.71-4.13L1.08 15.5c1.64 3.27 4.98 5.57 8.94 5.57z"></path><path fill="currentColor" d="M6.47 12.23c-.22-.64-.34-1.32-.34-2.03s.12-1.39.34-2.03l-4.2-3.26C1.41 6.55 1 8.21 1 10.2c0 1.99.41 3.65 1.27 5.27l4.2-3.24z"></path><path fill="currentColor" d="M12.18 3.33c1.7 0 3.01.73 3.69 1.38l2.7-2.63C16.89.65 14.7 0 12.18 0 8.22 0 4.88 2.3 3.24 5.57l4.2 3.26c.84-2.4 3.1-4.13 5.71-4.13z"></path></svg>
-                      Login dengan Google
-                    </button>
+                  <div className="space-y-6">
+                    {/* Wadah rahasia Recaptcha (Wajib untuk login OTP Telepon) */}
+                    <div id="recaptcha-container"></div>
+
+                    {/* --- LOGIN GOOGLE --- */}
+                    <div className="border-b border-gray-100 pb-5">
+                      <p className="text-xs text-gray-500 font-bold mb-3">Cara Tercepat:</p>
+                      <button onClick={handleLoginGoogle} className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 transition-colors">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h5.51c-.18 1.09-1.01 2.94-2.76 4.11l4.28 3.32c2.51-2.31 3.96-5.71 3.96-9.52 0-.91-.13-1.74-.35-2.52z"></path><path fill="currentColor" d="M12.18 21.07c2.61 0 4.81-.86 6.41-2.33l-4.28-3.32c-.81.56-1.93.94-3.32.94-2.61 0-4.87-1.73-5.71-4.13L1.08 15.5c1.64 3.27 4.98 5.57 8.94 5.57z"></path><path fill="currentColor" d="M6.47 12.23c-.22-.64-.34-1.32-.34-2.03s.12-1.39.34-2.03l-4.2-3.26C1.41 6.55 1 8.21 1 10.2c0 1.99.41 3.65 1.27 5.27l4.2-3.24z"></path><path fill="currentColor" d="M12.18 3.33c1.7 0 3.01.73 3.69 1.38l2.7-2.63C16.89.65 14.7 0 12.18 0 8.22 0 4.88 2.3 3.24 5.57l4.2 3.26c.84-2.4 3.1-4.13 5.71-4.13z"></path></svg>
+                        Login dengan Google
+                      </button>
+                    </div>
+
+                    {/* --- LOGIN EMAIL LINK --- */}
+                    <div className="border-b border-gray-100 pb-5">
+                      <p className="text-xs text-gray-500 font-bold mb-3">Login Tautan Email (Tanpa Sandi):</p>
+                      <div className="flex gap-2">
+                         <input type="email" placeholder="contoh@email.com" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+                           className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 outline-none text-sm font-medium focus:ring-2 focus:ring-orange-500" />
+                         <button onClick={handleLoginEmailLink} disabled={isSendingLink} className="bg-gray-800 text-white px-5 py-3 rounded-2xl font-bold hover:bg-gray-700 disabled:bg-gray-300 transition-colors">
+                           {isSendingLink ? 'Kirim...' : 'Kirim'}
+                         </button>
+                      </div>
+                    </div>
+
+                    {/* --- LOGIN TELEPON --- */}
+                    <div>
+                      <p className="text-xs text-gray-500 font-bold mb-3">Login dengan Nomor Telepon:</p>
+                      {!confirmationResult ? (
+                        <div className="flex gap-2">
+                           <input type="tel" placeholder="+62812..." value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)}
+                             className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 outline-none text-sm font-medium focus:ring-2 focus:ring-orange-500" />
+                           <button onClick={handleSendOTP} className="bg-gray-800 text-white px-5 py-3 rounded-2xl font-bold hover:bg-gray-700 transition-colors">OTP</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 animate-in fade-in">
+                           <input type="number" placeholder="Kode 6 Digit" value={otpCode} onChange={(e) => setOtpCode(e.target.value)}
+                             className="flex-1 bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl px-4 outline-none font-bold tracking-widest text-center focus:ring-2 focus:ring-orange-500" />
+                           <button onClick={handleVerifyOTP} className="bg-orange-500 text-white px-5 py-3 rounded-2xl font-bold hover:bg-orange-600 transition-colors">Masuk</button>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
               </div>
