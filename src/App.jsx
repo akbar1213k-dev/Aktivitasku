@@ -677,9 +677,9 @@ export default function App() {
           {activeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in duration-300">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Aktivitas Saya</h2>
+                <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Aktivitas Saya</h2>
                 <select 
-                  className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
+                  className={`border text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-600'}`}
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
                 >
@@ -688,7 +688,6 @@ export default function App() {
                   <option value="custom">Pilih Tanggal...</option>
                 </select>
               </div>
-
               {dateFilter === 'custom' && (
                 <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
                   <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
@@ -707,6 +706,7 @@ export default function App() {
                 filteredData.map((item) => {
                   const hasSegments = item.segments && item.segments.length > 1;
                   return (
+                  {/* --- edit mode gelap --- */}
                   <div 
                     key={item.id} 
                     onPointerDown={() => handlePointerDown(item.id)}
@@ -716,37 +716,37 @@ export default function App() {
                       if (isSelectionMode) toggleSelection(item.id);
                       else if (hasSegments) setExpandedId(expandedId === item.id ? null : item.id);
                     }}
-                    className={`bg-white p-4 rounded-2xl shadow-sm border ${isSelectionMode && selectedItems.includes(item.id) ? 'border-orange-500 bg-orange-50/50' : 'border-gray-100'} flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''}`}
+                    className={`p-4 rounded-2xl shadow-sm border flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''} ${isSelectionMode && selectedItems.includes(item.id) ? (isDarkMode ? 'border-orange-500 bg-orange-900/40' : 'border-orange-500 bg-orange-50/50') : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100')}`}
                   >
                     <div className="flex justify-between items-center w-full">
                         {isSelectionMode && (
                            <div className="mr-3 flex-shrink-0">
-                             <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${selectedItems.includes(item.id) ? 'bg-orange-500 border-orange-500' : 'border-gray-300'}`}>
+                             <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${selectedItems.includes(item.id) ? 'bg-orange-500 border-orange-500' : (isDarkMode ? 'border-gray-600' : 'border-gray-300')}`}>
                                {selectedItems.includes(item.id) && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
                              </div>
                            </div>
                         )}
 
                         <div className="flex-1 pr-4">
-                          <p className="font-bold text-gray-800 text-lg break-words">
+                          <p className={`font-bold text-lg break-words ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                             {item.activity}
                             {hasSegments && (
-                               <span className="inline-block ml-2 align-middle text-gray-300">
+                               <span className="inline-block ml-2 align-middle text-gray-400">
                                    <svg className={`w-5 h-5 transform transition-transform ${expandedId === item.id ? 'rotate-180 text-orange-500' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                </span>
                             )}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             <p className="text-xs font-medium text-gray-400">{item.date} • {item.startTime} - {item.endTime}</p>
-                            {item.category && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{item.category}</span>}
+                            {item.category && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-600'}`}>{item.category}</span>}
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
-                          <div className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full text-sm font-extrabold shadow-sm whitespace-nowrap">
+                          <div className={`px-3 py-1.5 rounded-full text-sm font-extrabold shadow-sm whitespace-nowrap ${isDarkMode ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-50 text-orange-600'}`}>
                             {item.durationText}
                           </div>
                           {!isSelectionMode && (
-                            <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className="p-2 text-gray-300 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-colors active:scale-90">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); }} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'text-gray-400 hover:text-orange-400 hover:bg-gray-700' : 'text-gray-300 hover:text-orange-500 hover:bg-orange-50'}`}>
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                             </button>
                           )}
@@ -793,9 +793,9 @@ export default function App() {
           {activeTab === 'stats' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Statistik</h2>
+                <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Aktivitas Saya</h2>
                 <select 
-                  className="bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500"
+                  className={`border text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-600'}`}
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
                 >
@@ -1150,7 +1150,7 @@ export default function App() {
 
        {/* --- KODE NAVIGASI BAWAH YANG DIPERBARUI --- */}
         {/* --- KODE NAVIGASI BAWAH YANG BARU (DENGAN TOMBOL SETTINGS) --- */}
-        <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex justify-around items-center p-3 z-50 rounded-t-3xl shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+        <div className={`fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md flex justify-around items-center p-3 z-50 rounded-t-3xl shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] border-t transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
           
           <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-14 ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
