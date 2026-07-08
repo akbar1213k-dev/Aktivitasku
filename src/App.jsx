@@ -706,7 +706,6 @@ export default function App() {
                 filteredData.map((item) => {
                   const hasSegments = item.segments && item.segments.length > 1;
                   return (
-                  {/* --- edit mode gelap --- */}
                   <div 
                     key={item.id} 
                     onPointerDown={() => handlePointerDown(item.id)}
