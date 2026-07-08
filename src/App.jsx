@@ -416,7 +416,7 @@ export default function App() {
 
   return (
     <div className="flex justify-center bg-gray-200 min-h-screen font-sans">
-      <div className="w-full max-w-md bg-gray-50 h-screen relative flex flex-col shadow-2xl overflow-hidden">
+      <div className="w-full max-w-md bg-gray-50 min-h-screen relative flex flex-col shadow-2xl">
         
         {toast && (
           <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
@@ -424,7 +424,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto pb-28 p-6">
+        <div className="flex-1 pb-28 p-6">
           
           {activeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in duration-300">
@@ -628,7 +628,7 @@ export default function App() {
         </div>
 
         {!isSelectionMode ? (
-          <nav className="absolute bottom-0 w-full bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
+          <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
             <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 transition-colors ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-400'}`}>
               <svg className="w-6 h-6" fill={activeTab === 'home' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
               <span className="text-[10px] font-bold">Beranda</span>
@@ -644,7 +644,7 @@ export default function App() {
             </button>
           </nav>
         ) : (
-          <div className="absolute bottom-0 w-full bg-gray-900 border-t border-gray-800 px-6 py-6 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl animate-in slide-in-from-bottom-5">
+          <div className="fixed bottom-0 w-full max-w-md bg-gray-900 border-t border-gray-800 px-6 py-6 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl animate-in slide-in-from-bottom-5">
             <button onClick={() => {setIsSelectionMode(false); setSelectedItems([]);}} className="text-gray-300 hover:text-white font-bold text-sm px-2">Batal</button>
             <span className="text-white font-extrabold">{selectedItems.length} Terpilih</span>
             <div className="flex gap-5">
