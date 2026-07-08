@@ -744,13 +744,61 @@ export default function App() {
             </div>
           </div>
         )}
-
         <datalist id="category-list">
           {availableCategories.map(c => <option key={c} value={c} />)}
         </datalist>
 
-      </div>
-    </div>
-    </div>
+        </div> {/* Akhir dari div konten utama (flex-1 pb-28 p-6) */}
+
+        {/* --- KODE MODAL TAMBAH AKTIVITAS YANG HILANG --- */}
+        {isModalOpen && (
+          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <h3 className="text-xl font-extrabold text-gray-800 mb-2">Tambah Aktivitas</h3>
+              <p className="text-xs text-gray-500 mb-4">Paste format teks Anda di bawah ini:</p>
+              
+              <textarea 
+                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-2xl h-40 mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-mono text-xs resize-none"
+                placeholder="Contoh:&#10;[12/10 12.00] : Mulai aktivitas..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+              />
+              
+              <div className="flex gap-3 mb-4">
+                <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
+                <button onClick={handleParse} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan Data</button>
+              </div>
+
+              <div className="flex gap-3 border-t border-gray-100 pt-4">
+                <button onClick={handleExport} className="flex-1 text-xs font-bold text-gray-500 bg-gray-50 py-2 rounded-xl hover:bg-gray-100">Export JSON</button>
+                <label className="flex-1 text-xs font-bold text-gray-500 bg-gray-50 py-2 rounded-xl hover:bg-gray-100 text-center cursor-pointer">
+                  Import JSON
+                  <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- KODE NAVIGASI BAWAH YANG HILANG --- */}
+        <div className="absolute bottom-0 w-full bg-white border-t border-gray-100 flex justify-around items-center p-3 z-50 rounded-t-3xl shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] pb-6">
+          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+            <span className="text-[10px] font-extrabold">Home</span>
+          </button>
+
+          <button onClick={() => setIsModalOpen(true)} className="relative -top-5 bg-orange-500 text-white p-4 rounded-full shadow-xl shadow-orange-500/30 border-4 border-white hover:bg-orange-600 hover:scale-105 transition-all active:scale-95">
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4"></path></svg>
+          </button>
+
+          <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-16 ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+             <span className="text-[10px] font-extrabold">Statistik</span>
+          </button>
+        </div>
+
+      </div> {/* Menutup div "w-full max-w-md..." */}
+    </div> {/* Menutup div "flex justify-center..." */}
   );
 }
+      
