@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Inisialisasi Firebase
@@ -66,7 +66,7 @@ export default function App() {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          await signInAnonymously(auth);
+          
         }
       } catch (error) {
         console.error("Auth error:", error);
@@ -89,6 +89,32 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  const handleLoginGoogle = async () => {
+    if (!auth) { showToast('Sistem Cloud belum siap.'); return; }
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      showToast('Berhasil Login!');
+    } catch(e) {
+      showToast('Gagal Login. Cek koneksi Anda.');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      setUser(null); // Menghapus sesi
+      // Muat ulang data dari mode lokal
+      const savedData = localStorage.getItem('offline_activities');
+      setParsedData(savedData ? JSON.parse(savedData) : []);
+      showToast('Logout berhasil. Kembali ke Mode Lokal.');
+      setActiveTab('home');
+    } catch(e) {
+      showToast('Gagal Logout.');
+    }
+  };
 
   const showToast = (msg) => {
     setToast(msg);
@@ -715,6 +741,42 @@ export default function App() {
           </div>
       )}
 
+          {activeTab === 'settings' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Pengaturan</h2>
+              
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 shadow-sm">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-800 text-lg">
+                      {user && !user.isAnonymous ? (user.displayName || 'Pengguna Cloud') : 'Mode Lokal'}
+                    </h3>
+                    <p className="text-xs text-gray-400 font-medium">
+                      {user && !user.isAnonymous ? user.email : 'Belum terhubung ke Awan'}
+                    </p>
+                  </div>
+                </div>
+
+                {user && !user.isAnonymous ? (
+                  <button onClick={handleLogout} className="w-full bg-red-50 text-red-500 hover:bg-red-100 font-bold py-3.5 rounded-2xl transition-colors">
+                    Keluar dari Cloud
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-gray-500 font-medium mb-4">Login dengan Google untuk menyimpan dan mensinkronkan aktivitas Anda secara permanen antar perangkat.</p>
+                    <button onClick={handleLoginGoogle} className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 transition-colors">
+                      <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h5.51c-.18 1.09-1.01 2.94-2.76 4.11l4.28 3.32c2.51-2.31 3.96-5.71 3.96-9.52 0-.91-.13-1.74-.35-2.52z"></path><path fill="currentColor" d="M12.18 21.07c2.61 0 4.81-.86 6.41-2.33l-4.28-3.32c-.81.56-1.93.94-3.32.94-2.61 0-4.87-1.73-5.71-4.13L1.08 15.5c1.64 3.27 4.98 5.57 8.94 5.57z"></path><path fill="currentColor" d="M6.47 12.23c-.22-.64-.34-1.32-.34-2.03s.12-1.39.34-2.03l-4.2-3.26C1.41 6.55 1 8.21 1 10.2c0 1.99.41 3.65 1.27 5.27l4.2-3.24z"></path><path fill="currentColor" d="M12.18 3.33c1.7 0 3.01.73 3.69 1.38l2.7-2.63C16.89.65 14.7 0 12.18 0 8.22 0 4.88 2.3 3.24 5.57l4.2 3.26c.84-2.4 3.1-4.13 5.71-4.13z"></path></svg>
+                      Login dengan Google
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         {editingItem && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -911,20 +973,26 @@ export default function App() {
         )}
 
        {/* --- KODE NAVIGASI BAWAH YANG DIPERBARUI --- */}
+        {/* --- KODE NAVIGASI BAWAH YANG BARU (DENGAN TOMBOL SETTINGS) --- */}
         <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex justify-around items-center p-3 z-50 rounded-t-3xl shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
           
-          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-16 ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center space-y-1 w-14 ${activeTab === 'home' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             <span className="text-[10px] font-extrabold">Home</span>
+          </button>
+
+          <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-14 ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+             <span className="text-[10px] font-extrabold">Stats</span>
           </button>
 
           <button onClick={() => setIsModalOpen(true)} className="relative -top-4 bg-orange-500 text-white p-3.5 rounded-full shadow-lg shadow-orange-500/40 border-4 border-white hover:bg-orange-600 hover:scale-105 transition-all active:scale-95">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4"></path></svg>
           </button>
 
-          <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 w-16 ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
-             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-             <span className="text-[10px] font-extrabold">Statistik</span>
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center space-y-1 w-14 ${activeTab === 'settings' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+             <span className="text-[10px] font-extrabold">Setelan</span>
           </button>
 
         </div>
