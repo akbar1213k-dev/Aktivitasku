@@ -435,6 +435,103 @@ export default function App() {
     setBulkCategory('');
   };
 
+  const handleBulkMerge = async () => {
+    if (selectedItems.length < 2) {
+      showToast('Pilih minimal 2 aktivitas untuk digabungkan!');
+      return;
+    }
+
+    // 1. Ambil detail aktivitas yang dipilih
+    const activitiesToMerge = parsedData.filter(item => selectedItems.includes(item.id));
+
+    // 2. Cek apakah kategori sama
+    const categories = new Set(activitiesToMerge.map(item => item.category || 'Belum Kategori'));
+    if (categories.size > 1) {
+      showToast('Peringatan: Aktivitas yang digabungkan memiliki kategori berbeda!');
+      return;
+    }
+
+    // 3. Urutkan berdasarkan waktu paling awal (untuk dijadikan judul utama)
+    activitiesToMerge.sort((a, b) => {
+       const dateA = parseDateStr(a.date);
+       const [hA, mA] = a.startTime.replace('.', ':').split(':');
+       dateA.setHours(hA, mA, 0, 0);
+
+       const dateB = parseDateStr(b.date);
+       const [hB, mB] = b.startTime.replace('.', ':').split(':');
+       dateB.setHours(hB, mB, 0, 0);
+
+       return dateA.getTime() - dateB.getTime();
+    });
+
+    const baseActivity = activitiesToMerge[0];
+    const otherActivities = activitiesToMerge.slice(1);
+
+    // 4. Gabungkan semua segmen / sesi waktunya
+    let combinedSegments = [];
+    activitiesToMerge.forEach(act => {
+       if (act.segments && act.segments.length > 0) {
+          combinedSegments.push(...act.segments);
+       } else {
+          combinedSegments.push({
+             start: act.startTime,
+             end: act.endTime,
+             rawMinutes: act.rawMinutes
+          });
+       }
+    });
+
+    // Kalkulasi ulang total durasi semua segmen
+    let totalMinutes = 0;
+    combinedSegments.forEach(seg => {
+        if (seg.start && seg.end) {
+            const info = calculateDurationInfo(seg.start, seg.end);
+            seg.rawMinutes = info.rawMinutes;
+            totalMinutes += info.rawMinutes;
+        }
+    });
+
+    // Susun data aktivitas gabungan
+    const updatedBaseActivity = {
+       ...baseActivity,
+       segments: combinedSegments,
+       startTime: combinedSegments[0].start, // Sesi paling awal
+       endTime: combinedSegments[combinedSegments.length - 1].end, // Sesi paling akhir
+       rawMinutes: totalMinutes,
+    };
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0 && minutes > 0) updatedBaseActivity.durationText = `${hours}j ${minutes}m`;
+    else if (hours > 0) updatedBaseActivity.durationText = `${hours}j`;
+    else updatedBaseActivity.durationText = `${minutes}m`;
+
+    // 5. Simpan pembaruan ke Database / State
+    if (user && db) {
+       const batch = writeBatch(db);
+       
+       // Perbarui aktivitas paling awal
+       const baseRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', baseActivity.id);
+       batch.update(baseRef, updatedBaseActivity);
+
+       // Hapus sisa aktivitas yang sudah digabung
+       otherActivities.forEach(act => {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
+          batch.delete(docRef);
+       });
+       await batch.commit();
+    } else {
+       setParsedData(prev => {
+          let newData = prev.filter(item => !otherActivities.find(o => o.id === item.id));
+          return newData.map(item => item.id === baseActivity.id ? updatedBaseActivity : item);
+       });
+    }
+
+    showToast('Aktivitas berhasil digabungkan!');
+    setIsSelectionMode(false);
+    setSelectedItems([]);
+  };
+
   const totalMinutesAll = filteredData.reduce((acc, curr) => acc + curr.rawMinutes, 0);
   const totalHours = Math.floor(totalMinutesAll / 60);
   const totalMins = totalMinutesAll % 60;
@@ -746,20 +843,29 @@ export default function App() {
         )}
 
           {/* --- TAMBAHKAN MULAI DARI SINI: TOOLBAR SELEKSI --- */}
+        {/* --- KODE TOOLBAR SELEKSI YANG DIPERBARUI (DENGAN TOMBOL GABUNG) --- */}
         {isSelectionMode && selectedItems.length > 0 && (
           <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 w-full max-w-md px-4 z-[60] animate-in slide-in-from-bottom-4 fade-in duration-200">
             <div className="bg-gray-900 rounded-3xl shadow-2xl p-4 flex items-center justify-between text-white border border-gray-700">
-              <div className="flex items-center gap-3">
-                <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); }} className="p-2.5 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); }} className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
                   <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
                 <span className="font-extrabold text-sm">{selectedItems.length} Terpilih</span>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setCategoryModalOpen(true)} className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs font-bold transition-colors">
+                
+                {/* --- TOMBOL GABUNGKAN (Hanya muncul jika lebih dari 1 dipilih) --- */}
+                {selectedItems.length > 1 && (
+                  <button onClick={handleBulkMerge} className="px-3 py-2 bg-blue-500 hover:bg-blue-400 rounded-xl text-xs font-bold transition-colors">
+                    Gabung
+                  </button>
+                )}
+
+                <button onClick={() => setCategoryModalOpen(true)} className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs font-bold transition-colors">
                   Kategori
                 </button>
-                <button onClick={handleBulkDelete} className="p-2.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
+                <button onClick={handleBulkDelete} className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
               </div>
