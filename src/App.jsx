@@ -748,7 +748,7 @@ export default function App() {
           {availableCategories.map(c => <option key={c} value={c} />)}
         </datalist>
 
-        </div> {/* Akhir dari div konten utama (flex-1 pb-28 p-6) */}
+        </div> 
 
         {/* --- KODE MODAL TAMBAH AKTIVITAS YANG HILANG --- */}
         {isModalOpen && (
@@ -797,8 +797,8 @@ export default function App() {
           </button>
         </div>
 
-      </div> {/* Menutup div "w-full max-w-md..." */}
-    </div> {/* Menutup div "flex justify-center..." */}
+      </div> 
+    </div> 
   );
 }
       
