@@ -744,6 +744,30 @@ export default function App() {
             </div>
           </div>
         )}
+
+          {/* --- TAMBAHKAN MULAI DARI SINI: TOOLBAR SELEKSI --- */}
+        {isSelectionMode && selectedItems.length > 0 && (
+          <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 w-full max-w-md px-4 z-[60] animate-in slide-in-from-bottom-4 fade-in duration-200">
+            <div className="bg-gray-900 rounded-3xl shadow-2xl p-4 flex items-center justify-between text-white border border-gray-700">
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setIsSelectionMode(false); setSelectedItems([]); }} className="p-2.5 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
+                  <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+                <span className="font-extrabold text-sm">{selectedItems.length} Terpilih</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setCategoryModalOpen(true)} className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs font-bold transition-colors">
+                  Kategori
+                </button>
+                <button onClick={handleBulkDelete} className="p-2.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* --- BATAS AKHIR KODE TOOLBAR SELEKSI --- */}
+          
         <datalist id="category-list">
           {availableCategories.map(c => <option key={c} value={c} />)}
         </datalist>
