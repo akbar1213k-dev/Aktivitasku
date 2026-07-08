@@ -301,11 +301,31 @@ export default function App() {
 
   const handleSaveEdit = async () => {
     try {
-      const durInfo = calculateDurationInfo(editingItem.startTime, editingItem.endTime);
-      const updatedItem = { ...editingItem, durationText: durInfo.text, rawMinutes: durInfo.rawMinutes };
+      let updatedItem = { ...editingItem };
       
-      // Jika jam diedit, sistem akan menyatukan segmen menjadi satu agar kalkulasi tidak error
-      if (updatedItem.segments) updatedItem.segments = null; 
+      if (updatedItem.segments && updatedItem.segments.length > 0) {
+        // Kalkulasi ulang total menit dari semua segmen
+        let totalMinutes = 0;
+        updatedItem.segments.forEach(seg => {
+            if(seg.start && seg.end) {
+              const info = calculateDurationInfo(seg.start, seg.end);
+              seg.rawMinutes = info.rawMinutes;
+              totalMinutes += info.rawMinutes;
+            }
+        });
+        updatedItem.startTime = updatedItem.segments[0].start;
+        updatedItem.endTime = updatedItem.segments[updatedItem.segments.length - 1].end;
+        updatedItem.rawMinutes = totalMinutes;
+        
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours > 0 && minutes > 0) updatedItem.durationText = `${hours}j ${minutes}m`;
+        else if (hours > 0) updatedItem.durationText = `${hours}j`;
+        else updatedItem.durationText = `${minutes}m`;
+      } else {
+        const durInfo = calculateDurationInfo(editingItem.startTime, editingItem.endTime);
+        updatedItem = { ...updatedItem, durationText: durInfo.text, rawMinutes: durInfo.rawMinutes };
+      }
 
       if (user && db) {
          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);
