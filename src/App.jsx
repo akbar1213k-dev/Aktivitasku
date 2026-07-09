@@ -904,24 +904,32 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                 </div>
               )}
               
-              <div className="bg-gradient-to-br from-orange-500 to-orange-400 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+              {/* --- KARTU GABUNGAN: WAKTU AKTIVITAS & TOTAL SESI --- */}
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-3xl shadow-xl shadow-orange-500/20 relative overflow-hidden flex flex-col justify-between min-h-[160px]">
+                {/* Ikon Latar Belakang (Transparan) */}
                 <div className="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
-                   <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                   <svg className="w-36 h-36" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                 </div>
-                <p className="text-orange-100 text-sm font-medium relative z-10">Total Waktu Aktivitas</p>
-                <p className="text-3xl font-black mt-1 relative z-10">{totalDurationText}</p>
+                
+                {/* Bagian Atas: Prioritas Utama (Total Waktu) */}
+                <div className="relative z-10 flex justify-between items-start">
+                   <div>
+                      <p className="text-orange-100 text-xs font-black uppercase tracking-widest mb-1 shadow-sm">Total Waktu Aktivitas</p>
+                      <p className="text-3xl md:text-4xl font-black leading-tight drop-shadow-md">{totalDurationText}</p>
+                   </div>
+                </div>
+                
+                {/* Bagian Bawah: Prioritas Kedua (Total Sesi) */}
+                <div className="relative z-10 mt-6 pt-4 border-t border-orange-400/40 flex justify-between items-center">
+                   <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center shadow-inner">
+                         <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                      </div>
+                      <span className="text-xs font-bold text-orange-50 uppercase tracking-wider">Sesi Terhitung</span>
+                   </div>
+                   <p className="text-xl font-black drop-shadow-sm">{filteredData.length} Sesi</p>
+                </div>
               </div>
-
-              <div className={`p-5 rounded-3xl shadow-sm border flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
-                <div>
-                  <p className="text-gray-400 text-sm font-medium">Total Sesi Aktivitas</p>
-                  <p className={`text-2xl font-black mt-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{filteredData.length} Sesi</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                </div>
-              </div>
-
               {/* --- STATISTIK WAKTU TERCATAT VS TIDAK TERCATAT --- */}
               <div className={`p-5 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
                 <div className="flex justify-between items-end mb-3">
