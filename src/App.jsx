@@ -687,6 +687,42 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
   const totalMins = totalMinutesAll % 60;
   const totalDurationText = totalHours > 0 ? `${totalHours} Jam ${totalMins} Menit` : `${totalMins} Menit`;
 
+  // --- LOGIKA WAKTU TERCATAT VS TIDAK TERCATAT ---
+  let totalPossibleMinutes = 0;
+  if (dateFilter === 'today') {
+    totalPossibleMinutes = 24 * 60; // 24 Jam
+  } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+    const s = new Date(customStartDate); s.setHours(0,0,0,0);
+    const e = new Date(customEndDate); e.setHours(0,0,0,0);
+    const diffTime = Math.abs(e - s);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    totalPossibleMinutes = diffDays * 24 * 60;
+  } else {
+    // Untuk "Semua Waktu", hitung dari hari pertama aktivitas dicatat sampai hari ini
+    if (parsedData.length > 0) {
+       const allDates = parsedData.map(d => parseDateStr(d.date).getTime());
+       const minDate = Math.min(...allDates);
+       const maxDate = new Date().setHours(0,0,0,0);
+       const diffTime = Math.max(0, maxDate - minDate);
+       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+       totalPossibleMinutes = diffDays * 24 * 60;
+    } else {
+       totalPossibleMinutes = 24 * 60;
+    }
+  }
+
+  const recordedMinutes = totalMinutesAll;
+  const unrecordedMinutes = Math.max(0, totalPossibleMinutes - recordedMinutes);
+  const recordedPct = totalPossibleMinutes > 0 ? (recordedMinutes / totalPossibleMinutes) * 100 : 0;
+  const unrecordedPct = totalPossibleMinutes > 0 ? (unrecordedMinutes / totalPossibleMinutes) * 100 : 0;
+
+  const formatMins = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = Math.floor(mins % 60);
+    return h > 0 ? `${h}j ${m}m` : `${m}m`;
+  };
+  // ------------------------------------------------
+
   const categoryStats = filteredData.reduce((acc, curr) => {
     const cat = curr.category || 'Belum Kategori';
     acc[cat] = (acc[cat] || 0) + curr.rawMinutes;
@@ -885,6 +921,35 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                 </div>
               </div>
+
+              {/* --- STATISTIK WAKTU TERCATAT VS TIDAK TERCATAT --- */}
+              <div className={`p-5 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                <div className="flex justify-between items-end mb-3">
+                  <div>
+                    <p className="text-orange-500 text-[10px] font-extrabold uppercase tracking-wider mb-1">Tercatat</p>
+                    <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      {recordedPct.toFixed(1)}% <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(recordedMinutes)})</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-400 text-[10px] font-extrabold uppercase tracking-wider mb-1">Tdk Tercatat</p>
+                    <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      {unrecordedPct.toFixed(1)}% <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(unrecordedMinutes)})</span>
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Progress Bar Satu Garis Proporsional */}
+                <div className={`w-full h-4 rounded-full flex overflow-hidden ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                  <div className="bg-orange-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${recordedPct}%` }}>
+                    {recordedPct >= 10 && <span className="text-[8px] font-bold text-white opacity-80">{recordedPct.toFixed(0)}%</span>}
+                  </div>
+                  <div className={`h-full flex items-center justify-center transition-all duration-500 ${isDarkMode ? 'bg-gray-600' : 'bg-gray-200'}`} style={{ width: `${unrecordedPct}%` }}>
+                  </div>
+                </div>
+              </div>
+              {/* -------------------------------------------------- */}
+
               {/* --- STATISTIK KATEGORI --- */}
               <div className="mt-6 space-y-4">
                 <h3 className={`text-lg font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Statistik per Kategori</h3>
