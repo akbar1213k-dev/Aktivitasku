@@ -43,9 +43,17 @@ export default function App() {
     }
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false); // STATE BARU UNTUK PANDUAN
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
   
+  // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
+  const handleCopyGuide = () => {
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar (Waktu bersambung otomatis):\n[DD/MM HH.MM] : Nama Aktivitas\nContoh:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n(Sistem menghitung Sarapan pagi dari 08.00 hingga 08.30)\n\n2. Format Eksplisit (Waktu spesifik):\n[DD/MM HH.MM] : HH.MM Nama Aktivitas\nContoh:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Aktivitas Selesai:\nKetik titik tunggal (.)\nContoh:\n[12/10 11.00] : .\n\n4. Format Jeda/Istirahat (Sesi):\n(..) untuk JEDA, (...) untuk LANJUT\nContoh:\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur (Backward):\nKetik titik di awal nama (. Nama Aktivitas)\nContoh:\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email`;
+    navigator.clipboard.writeText(guideText);
+    showToast('Teks Panduan Berhasil Disalin!');
+  };
+
   // --- STATE UNTUK TEMA ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('themeMode') === 'dark';
@@ -1267,7 +1275,16 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
         {isModalOpen && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-              <h3 className={`text-xl font-extrabold mb-2 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tambah Aktivitas</h3>
+              
+              <div className="flex justify-between items-center mb-1">
+                <h3 className={`text-xl font-extrabold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tambah Aktivitas</h3>
+                
+                {/* --- TOMBOL PANDUAN --- */}
+                <button onClick={() => setIsGuideOpen(true)} className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors shadow-sm border border-blue-100 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  Panduan
+                </button>
+              </div>
               <p className={`text-xs mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Paste format teks Anda di bawah ini:</p>
               
               {/* Textarea dengan deteksi Dark Mode */}
@@ -1307,7 +1324,84 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
         )}
         {/* --- BATAS KODE MODAL TAMBAH AKTIVITAS --- */}
 
-       {/* --- KODE NAVIGASI BAWAH YANG DIPERBARUI --- */}
+        {/* --- KODE MODAL PANDUAN FORMAT (BARU) --- */}
+        {isGuideOpen && (
+          <div className="absolute inset-0 bg-gray-900/80 z-[80] flex items-center justify-center p-4 backdrop-blur-md">
+            <div className={`w-full max-h-[85vh] flex flex-col rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 border ${isDarkMode ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-100 text-gray-800'}`}>
+              
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-black">Panduan Format</h3>
+                <button onClick={handleCopyGuide} className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-xl text-[10px] font-black transition-colors flex items-center gap-1.5 shadow-md active:scale-95">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                  SALIN TEKS
+                </button>
+              </div>
+
+              <div className={`flex-1 overflow-y-auto pr-2 space-y-4 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                
+                {/* Aturan 1 */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">1. Format Dasar (Waktu Nyambung)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Waktu selesai otomatis dihitung dari waktu aktivitas berikutnya.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [12/10 08.00] : Sarapan pagi<br/>
+                    [12/10 08.30] : Mulai kerja
+                  </code>
+                </div>
+
+                {/* Aturan 2 */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">2. Format Eksplisit (Batas Waktu Jelas)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Menentukan jam mulai dan selesai dalam satu baris.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [12/10 09.00] : 10.30 Olahraga
+                  </code>
+                </div>
+
+                {/* Aturan 3 */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">3. Jeda / Sesi (Istirahat)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Gunakan titik dua (..) untuk menjeda, titik tiga (...) untuk melanjutkan.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [12/10 13.00] : Belajar<br/>
+                    [12/10 14.00] : ..<br/>
+                    [12/10 14.30] : ...<br/>
+                    [12/10 15.30] : .
+                  </code>
+                </div>
+
+                {/* Aturan 4 */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">4. Menandai Berhenti / Selesai</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Gunakan titik tunggal (.) untuk menutup aktivitas akhir.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [12/10 11.00] : .
+                  </code>
+                </div>
+
+                {/* Aturan 5 */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">5. Aktivitas Mundur (Backward)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Aktivitas yang baru teringat dicatat, letakkan titik sebelum nama (. Nama).</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [12/10 16.00] : Mulai Kerja<br/>
+                    [12/10 16.30] : . Balas Email
+                  </code>
+                </div>
+
+              </div>
+
+              <div className={`mt-5 pt-4 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                <button onClick={() => setIsGuideOpen(false)} className={`w-full py-3.5 rounded-2xl font-bold transition-colors shadow-sm ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                  Tutup Panduan
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+        {/* --- BATAS KODE MODAL PANDUAN FORMAT --- */}
+
         {/* --- KODE NAVIGASI BAWAH YANG BARU (DENGAN TOMBOL SETTINGS) --- */}
         <div className={`fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md flex justify-around items-center p-3 z-50 rounded-t-3xl shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] border-t transition-colors duration-300 ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
           
