@@ -663,14 +663,8 @@ export default function App() {
   }, {});
 
   return (
-    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'} lg:py-6`}>
-      
-      {/* BUNGKUSAN BARU UNTUK MEMBAGI LAYAR MENJADI DUA (KIRI & KANAN) */}
-      <div className="flex w-full max-w-5xl gap-6 justify-center items-start px-4 lg:px-0">
-        
-        {/* BAGIAN KIRI: APLIKASI UTAMA ANDA (Tetap max-w-md) */}
-        <div className={`w-full max-w-md min-h-screen lg:min-h-[90vh] relative flex flex-col shadow-2xl transition-colors duration-300 lg:rounded-[40px] overflow-hidden ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
-        
+    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
+      <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
         {toast && (
           <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
             {toast}
@@ -949,10 +943,83 @@ export default function App() {
                            <button onClick={handleVerifyOTP} className="bg-orange-500 text-white px-5 py-3 rounded-2xl font-bold hover:bg-orange-600 transition-colors">Masuk</button>
                         </div>
                       )}
-                    </div>
-
+                   </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* --- TAB VISUALISASI 24 JAM (BARU) --- */}
+          {activeTab === 'visual' && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Visual 24 Jam</h2>
+                <select 
+                  className={`border text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-orange-500 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-600'}`}
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                >
+                  <option value="all">Semua Waktu</option>
+                  <option value="today">Hari Ini</option>
+                  <option value="custom">Pilih Tanggal...</option>
+                </select>
+              </div>
+
+              {dateFilter === 'custom' && (
+                <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
+                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <span className="self-center text-gray-400 font-bold">-</span>
+                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                </div>
+              )}
+
+              <div className={`relative w-full h-[1440px] rounded-3xl overflow-hidden shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
+                    <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                      {i.toString().padStart(2, '0')}:00
+                    </span>
+                  </div>
+                ))}
+
+                {dateFilter === 'today' && (
+                  <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
+                     <div className="w-2 h-2 rounded-full bg-red-500 ml-1"></div>
+                  </div>
+                )}
+
+                {filteredData.map(act => {
+                  if (act.segments && act.segments.length > 1) {
+                    return act.segments.map((seg, idx) => {
+                      if (!seg.start || !seg.end) return null;
+                      const sParts = seg.start.replace('.', ':').split(':').map(Number);
+                      const startMins = sParts[0] * 60 + sParts[1];
+                      const blockHeight = Math.max(seg.rawMinutes, 15); 
+                      return (
+                        <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${isDarkMode ? 'bg-orange-500/20 border-orange-500/30 text-orange-300' : 'bg-orange-100 border-orange-200 text-orange-800'}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                          <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
+                          {blockHeight > 25 && <p className="opacity-80 text-[10px]">{seg.start} - {seg.end}</p>}
+                        </div>
+                      );
+                    });
+                  }
+
+                  if (!act.startTime || !act.endTime) return null;
+                  const sParts = act.startTime.replace('.', ':').split(':').map(Number);
+                  const startMins = sParts[0] * 60 + sParts[1];
+                  const blockHeight = Math.max(act.rawMinutes, 15);
+                  const isProductive = act.category && act.category.toLowerCase().includes('produktif') && !act.category.toLowerCase().includes('non');
+                  let colorClass = isDarkMode ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800';
+                  if (isProductive) colorClass = isDarkMode ? 'bg-green-500/20 border-green-500/30 text-green-300' : 'bg-green-50 border-green-200 text-green-800';
+
+                  return (
+                    <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                      <p className="font-bold truncate">{act.activity}</p>
+                      {blockHeight > 25 && <p className="opacity-80 text-[10px]">{act.startTime} - {act.endTime}</p>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1210,105 +1277,23 @@ export default function App() {
              <span className="text-[10px] font-extrabold">Stats</span>
           </button>
 
-          <button onClick={() => setIsModalOpen(true)} className="relative -top-4 bg-orange-500 text-white p-3.5 rounded-full shadow-lg shadow-orange-500/40 border-4 border-white hover:bg-orange-600 hover:scale-105 transition-all active:scale-95">
+          <button onClick={() => setIsModalOpen(true)} className={`relative -top-4 bg-orange-500 text-white p-3.5 rounded-full shadow-lg shadow-orange-500/40 border-[6px] hover:bg-orange-600 hover:scale-105 transition-all active:scale-95 flex-shrink-0 z-10 ${isDarkMode ? 'border-gray-900' : 'border-white'}`}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4"></path></svg>
           </button>
 
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center space-y-1 w-14 ${activeTab === 'settings' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+          {/* TOMBOL VISUAL (BARU) */}
+          <button onClick={() => setActiveTab('visual')} className={`flex flex-col items-center space-y-1 w-[4.5rem] ${activeTab === 'visual' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+             <span className="text-[10px] font-extrabold">Visual</span>
+          </button>
+
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center space-y-1 w-[4.5rem] ${activeTab === 'settings' ? 'text-orange-500' : 'text-gray-300 hover:text-gray-500'}`}>
              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
              <span className="text-[10px] font-extrabold">Setelan</span>
           </button>
 
         </div>
       </div> 
-      {/* AKHIR BAGIAN KIRI */}
-
-
-      {/* ============================================================== */}
-      {/* BAGIAN KANAN: VISUALISASI AKTIVITAS (TIMELINE 24 JAM) */}
-      {/* ============================================================== */}
-      <div className={`hidden lg:flex flex-col flex-1 h-[90vh] rounded-[40px] shadow-2xl transition-colors duration-300 overflow-hidden border sticky top-6 ${isDarkMode ? 'bg-gray-950 text-gray-100 border-gray-800' : 'bg-white text-gray-800 border-gray-100'}`}>
-        
-        {/* Header Timeline */}
-        <div className={`p-6 border-b z-10 shadow-sm ${isDarkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-100 bg-white'}`}>
-          <h2 className="text-2xl font-extrabold flex items-center gap-2">
-            <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            Visualisasi 24 Jam
-          </h2>
-          <p className="text-sm font-medium text-gray-500 mt-1">
-            Menampilkan {filteredData.length} aktivitas ({dateFilter === 'today' ? 'Hari Ini' : dateFilter === 'all' ? 'Semua Waktu' : 'Tanggal Custom'})
-          </p>
-        </div>
-
-        {/* Area Scroll Timeline */}
-        <div className="flex-1 overflow-y-auto relative bg-gradient-to-b from-transparent to-gray-50/50 dark:to-gray-900/50">
-          <div className="relative w-full h-[1440px]">
-            
-            {/* Garis Penanda Jam (00:00 - 23:00) */}
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
-                <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                  {i.toString().padStart(2, '0')}:00
-                </span>
-              </div>
-            ))}
-
-            {/* Garis Merah Waktu Saat Ini */}
-            {dateFilter === 'today' && (
-              <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
-                 <div className="w-2 h-2 rounded-full bg-red-500 ml-1"></div>
-              </div>
-            )}
-
-            {/* Render Blok Aktivitas */}
-            {filteredData.map(act => {
-              
-              if (act.segments && act.segments.length > 1) {
-                return act.segments.map((seg, idx) => {
-                  if (!seg.start || !seg.end) return null;
-                  const sParts = seg.start.replace('.', ':').split(':').map(Number);
-                  const startMins = sParts[0] * 60 + sParts[1];
-                  const blockHeight = Math.max(seg.rawMinutes, 15); 
-                  
-                  return (
-                    <div key={`${act.id}-${idx}`} 
-                         className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${isDarkMode ? 'bg-orange-500/20 border-orange-500/30 text-orange-300' : 'bg-orange-100 border-orange-200 text-orange-800'}`}
-                         style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                      <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
-                      {blockHeight > 25 && <p className="opacity-80 text-[10px]">{seg.start} - {seg.end}</p>}
-                    </div>
-                  );
-                });
-              }
-
-              if (!act.startTime || !act.endTime) return null;
-              const sParts = act.startTime.replace('.', ':').split(':').map(Number);
-              const startMins = sParts[0] * 60 + sParts[1];
-              const blockHeight = Math.max(act.rawMinutes, 15);
-
-              const isProductive = act.category && act.category.toLowerCase().includes('produktif') && !act.category.toLowerCase().includes('non');
-              let colorClass = isDarkMode ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800';
-              if (isProductive) {
-                 colorClass = isDarkMode ? 'bg-green-500/20 border-green-500/30 text-green-300' : 'bg-green-50 border-green-200 text-green-800';
-              }
-
-              return (
-                <div key={act.id} 
-                     className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${colorClass}`}
-                     style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                  <p className="font-bold truncate">{act.activity}</p>
-                  {blockHeight > 25 && <p className="opacity-80 text-[10px]">{act.startTime} - {act.endTime}</p>}
-                </div>
-              );
-            })}
-
-          </div>
-        </div>
-      </div>
-      {/* AKHIR BAGIAN KANAN */}
-
-      </div>
     </div> 
   );
 }
-      
