@@ -45,6 +45,7 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
+  
   // --- STATE UNTUK TEMA ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('themeMode') === 'dark';
@@ -53,6 +54,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('themeMode', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+// --- STATE UNTUK URUTAN ---
+  const [sortOrder, setSortOrder] = useState(() => {
+    return localStorage.getItem('sortOrder') || 'terbaru';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sortOrder', sortOrder);
+  }, [sortOrder]);
+  
   // --- STATE UNTUK LOGIN ---
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
@@ -496,6 +507,18 @@ export default function App() {
     return true;
   });
 
+const sortedHomeData = [...filteredData].sort((a, b) => {
+    const dateA = parseDateStr(a.date);
+    const [hA, mA] = (a.startTime || '00.00').replace('.', ':').split(':').map(Number);
+    dateA.setHours(hA || 0, mA || 0, 0, 0);
+    
+    const dateB = parseDateStr(b.date);
+    const [hB, mB] = (b.startTime || '00.00').replace('.', ':').split(':').map(Number);
+    dateB.setHours(hB || 0, mB || 0, 0, 0);
+    
+    return sortOrder === 'terbaru' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+  });                  
+
   const availableCategories = Array.from(new Set([
     'Produktif', 'Non Produktif', ...parsedData.map(d => d.category).filter(Boolean)
   ]));
@@ -695,14 +718,14 @@ export default function App() {
                 </div>
               )}
               
-              {filteredData.length === 0 ? (
+              {sortedHomeData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-gray-400 mt-24">
                   <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   <p className="font-medium text-gray-500">Belum ada data tersimpan</p>
                   <p className="text-xs mt-1">Tekan tombol + di bawah untuk menambah.</p>
                 </div>
               ) : (
-                filteredData.map((item) => {
+                sortedHomeData.map((item) => {
                   const hasSegments = item.segments && item.segments.length > 1;
                   return (
                   <div 
@@ -860,6 +883,27 @@ export default function App() {
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Pengaturan</h2>
+
+              {/* --- PENGATURAN URUTAN --- */}
+              <div className={`p-5 rounded-3xl shadow-sm border mb-6 flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-green-50 text-green-500'}`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path></svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Urutan Aktivitas</h3>
+                    <p className="text-xs text-gray-400 font-medium">Di Tab Beranda</p>
+                  </div>
+                </div>
+                <select 
+                  className={`border font-bold text-sm rounded-xl px-3 py-2 outline-none cursor-pointer focus:ring-2 focus:ring-orange-500 ${isDarkMode ? 'bg-gray-900 border-gray-600 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                >
+                  <option value="terbaru">Terbaru</option>
+                  <option value="terlama">Terlama</option>
+                </select>
+              </div>
 
               {/* --- TOGGLE MODE GELAP --- */}
               <div className={`p-5 rounded-3xl shadow-sm border mb-6 flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
