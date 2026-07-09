@@ -1126,7 +1126,8 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
               )}
 
               {/* KONTAINER UTAMA TIMELINE */}
-              <div className={`relative w-full rounded-3xl overflow-hidden shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+              {/* PENTING: Class 'overflow-hidden' DIHAPUS agar fitur Sticky (Mengapung) pada tanggal bisa bekerja! */}
+              <div className={`relative w-full rounded-3xl shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 {(() => {
                   // 1. Kelompokkan aktivitas berdasarkan Tanggal
                   const groupedData = {};
@@ -1150,7 +1151,7 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                      );
                   }
 
-                  // 3. Fungsi Pembuat Warna Lembut
+                  // 3. Fungsi Pembuat Warna Lembut (Otomatis beda per Nama Aktivitas)
                   const getActivityColor = (text) => {
                     let hash = 0;
                     for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
@@ -1177,14 +1178,19 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                       <div key={dateStr} className={`relative w-full h-[1440px] border-b border-dashed ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
                         
                         {/* --- Garis Batas 00:00 & Tanggal Mengapung (Sticky) --- */}
-                        <div className="sticky top-0 z-40 w-full pointer-events-none h-0">
-                           <div className={`w-full border-t-2 shadow-sm ${isDarkMode ? 'border-orange-500/60' : 'border-orange-500/70'}`}></div>
-                           <div className="flex justify-between items-start px-3 mt-1.5">
-                             <span className={`text-[10px] font-black tracking-widest flex items-center gap-1 backdrop-blur-md px-2 py-0.5 rounded shadow-sm opacity-90 ${isDarkMode ? 'text-orange-300 bg-gray-900/50' : 'text-orange-700 bg-white/60'}`}>
+                        {/* Menggunakan top-2 agar mengapung rapi sedikit di bawah atap layar HP */}
+                        <div className="sticky top-2 z-50 w-full pointer-events-none h-0 overflow-visible">
+                           
+                           {/* Garis Pembatas Tipis (Absolute agar tidak memakan tinggi ruang sama sekali) */}
+                           <div className={`absolute top-0 left-0 w-full border-t-[3px] shadow-sm ${isDarkMode ? 'border-orange-500/60' : 'border-orange-500/80'}`}></div>
+                           
+                           {/* Teks Tanggal & Info Aktivitas (Transparan & Mengapung di bawah garis) */}
+                           <div className="absolute top-0 left-0 w-full flex justify-between items-start px-3 mt-1.5">
+                             <span className={`text-[10px] font-black tracking-widest flex items-center gap-1 backdrop-blur-md px-2 py-0.5 rounded-lg shadow-sm opacity-90 border ${isDarkMode ? 'text-orange-300 bg-gray-900/60 border-gray-700' : 'text-orange-700 bg-white/70 border-gray-200'}`}>
                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                                {dateStr}
                              </span>
-                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-md opacity-90 ${isDarkMode ? 'bg-gray-800/60 text-gray-300' : 'bg-gray-200/60 text-gray-700'}`}>
+                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg backdrop-blur-md opacity-90 border ${isDarkMode ? 'bg-gray-800/60 text-gray-300 border-gray-700' : 'bg-gray-100/60 text-gray-700 border-gray-200'}`}>
                                {actsForDate.length} Aktv
                              </span>
                            </div>
@@ -1210,7 +1216,6 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                         {actsForDate.map(act => {
                           const colorClass = getActivityColor(act.activity);
 
-                          // Mapping Jika Memiliki Segmen / Jeda
                           if (act.segments && act.segments.length > 1) {
                             return act.segments.map((seg, idx) => {
                               if (!seg.start || !seg.end) return null;
@@ -1226,7 +1231,6 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                             });
                           }
 
-                          // Mapping Jika Aktivitas Normal (Tanpa Jeda)
                           if (!act.startTime || !act.endTime) return null;
                           const sParts = act.startTime.replace('.', ':').split(':').map(Number);
                           const startMins = sParts[0] * 60 + sParts[1];
