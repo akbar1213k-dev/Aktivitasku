@@ -81,6 +81,7 @@ export default function App() {
 
   const fileInputRef = useRef(null);
   const pressTimer = useRef(null);
+  const currentTimeRef = useRef(null); // Ref untuk menggulir ke garis merah
 
   // Filter, Seleksi, Kategori, & Expand
   const [dateFilter, setDateFilter] = useState('all');
@@ -1136,9 +1137,12 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                     groupedData[act.date].push(act);
                   });
 
-                  // 2. Urutkan tanggal secara kronologis (Terlama di atas, Terbaru di bawah)
+                 // 2. Urutkan tanggal mengikuti pengaturan (Terbaru/Terlama)
                   const sortedDates = Object.keys(groupedData).sort((a, b) => {
-                    return parseDateStr(a).getTime() - parseDateStr(b).getTime();
+                    const timeA = parseDateStr(a).getTime();
+                    const timeB = parseDateStr(b).getTime();
+                    // Jika diatur 'terbaru', tanggal paling baru di atas. Sebaliknya 'terlama' di atas.
+                    return sortOrder === 'terbaru' ? timeB - timeA : timeA - timeB;
                   });
 
                   // Tampilan jika kosong
@@ -1205,9 +1209,9 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                           </div>
                         ))}
 
-                        {/* Garis Merah Waktu Saat Ini */}
+                        {/* Garis Merah Waktu Saat Ini (Ditambah ref untuk target scroll) */}
                         {isToday && (
-                          <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
+                          <div ref={currentTimeRef} className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
                              <div className="w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
                           </div>
                         )}
@@ -1249,6 +1253,24 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                   });
                 })()}
               </div>
+
+              {/* Tombol Mengapung (FAB) ke Waktu Saat Ini */}
+              <div className="fixed bottom-[100px] left-1/2 transform -translate-x-1/2 w-full max-w-md flex justify-end px-6 pointer-events-none z-[60]">
+                 <button 
+                   onClick={() => {
+                     if (currentTimeRef.current) {
+                       currentTimeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                     } else {
+                       showToast('Garis waktu (Hari Ini) tidak ada di tampilan visual saat ini.');
+                     }
+                   }}
+                   className="pointer-events-auto bg-red-500/50 hover:bg-red-500/80 text-white p-3.5 rounded-full shadow-lg backdrop-blur-md transition-all active:scale-90 border border-red-400/40"
+                   aria-label="Ke Waktu Saat Ini"
+                 >
+                   <svg className="w-6 h-6 drop-shadow-md" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                 </button>
+              </div>
+
             </div>
           )}
           {/* --- BATAS KODE TAB VISUALISASI --- */}
