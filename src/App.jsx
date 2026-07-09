@@ -693,6 +693,31 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
     return acc;
   }, {});
 
+  // --- FUNGSI UNTUK WARNA KARTU BERBEDA TIAP HARI ---
+  const getDateColor = (dateStr, isDark) => {
+    if (!dateStr) return isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100';
+    
+    // Ambil angka hari dan bulan dari string "DD/MM"
+    const parts = dateStr.split('/');
+    const day = parseInt(parts[0], 10) || 0;
+    const month = parseInt(parts[1], 10) || 0;
+    
+    // Daftar palet warna pastel halus (Light & Dark Mode)
+    const themes = [
+      { light: 'bg-white border-gray-100', dark: 'bg-gray-800 border-gray-700' }, // Netral
+      { light: 'bg-blue-50/50 border-blue-100', dark: 'bg-blue-900/10 border-blue-800/40' },     // Biru halus
+      { light: 'bg-emerald-50/50 border-emerald-100', dark: 'bg-emerald-900/10 border-emerald-800/40' }, // Hijau halus
+      { light: 'bg-purple-50/50 border-purple-100', dark: 'bg-purple-900/10 border-purple-800/40' }, // Ungu halus
+      { light: 'bg-rose-50/50 border-rose-100', dark: 'bg-rose-900/10 border-rose-800/40' },       // Merah muda halus
+      { light: 'bg-amber-50/50 border-amber-100', dark: 'bg-amber-900/10 border-amber-800/40' },   // Kuning/Krem halus
+      { light: 'bg-teal-50/50 border-teal-100', dark: 'bg-teal-900/10 border-teal-800/40' }        // Toska halus
+    ];
+    
+    // Rumus agar tanggal yang sama selalu dapat warna yang sama persis
+    const index = (day + month) % themes.length;
+    return isDark ? themes[index].dark : themes[index].light;
+  };
+
   return (
     <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
       <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
@@ -745,7 +770,8 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                       if (isSelectionMode) toggleSelection(item.id);
                       else if (hasSegments) setExpandedId(expandedId === item.id ? null : item.id);
                     }}
-                    className={`p-4 rounded-2xl shadow-sm border flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''} ${isSelectionMode && selectedItems.includes(item.id) ? (isDarkMode ? 'border-orange-500 bg-orange-900/40' : 'border-orange-500 bg-orange-50/50') : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100')}`}
+                    // WARNA BACKGROUND DIGANTI MENGGUNAKAN getDateColor DI SINI:
+                    className={`p-4 rounded-2xl shadow-sm border flex flex-col hover:shadow-md transition-all group relative ${hasSegments ? 'cursor-pointer' : ''} ${isSelectionMode && selectedItems.includes(item.id) ? (isDarkMode ? 'border-orange-500 bg-orange-900/40' : 'border-orange-500 bg-orange-50/50') : getDateColor(item.date, isDarkMode)}`}
                   >
                     <div className="flex justify-between items-center w-full">
                         {isSelectionMode && (
