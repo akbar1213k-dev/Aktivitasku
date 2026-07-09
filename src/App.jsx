@@ -1200,26 +1200,27 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                            </div>
                         </div>
 
-                        {/* Garis Penanda Jam (00:00 - 23:00) */}
+                        {/* Garis Penanda Jam (00:00 - 23:00) -> Orientasi Dinamis */}
                         {Array.from({ length: 24 }).map((_, i) => (
-                          <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/40' : 'border-gray-200/50'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
-                            <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                          <div key={i} className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800/40' : 'border-gray-200/50'}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${i * 60}px`, bottom: sortOrder === 'terbaru' ? `${i * 60}px` : 'auto', height: '0px' }}>
+                            <span className={`absolute text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                               {i.toString().padStart(2, '0')}:00
                             </span>
                           </div>
                         ))}
 
-                        {/* Garis Merah Waktu Saat Ini (Ditambah ref untuk target scroll) */}
+                        {/* Garis Merah Waktu Saat Ini (Target Scroll) */}
                         {isToday && (
-                          <div ref={currentTimeRef} className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
-                             <div className="w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                          <div ref={currentTimeRef} className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: sortOrder === 'terbaru' ? 'auto' : `${new Date().getHours() * 60 + new Date().getMinutes()}px`, bottom: sortOrder === 'terbaru' ? `${new Date().getHours() * 60 + new Date().getMinutes()}px` : 'auto', height: '0px' }}>
+                             <div className="absolute w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)] -mt-1"></div>
                           </div>
                         )}
 
-                        {/* Render Kotak Aktivitas dengan Warna Halus */}
+                        {/* Render Kotak Aktivitas dengan Orientasi & Warna Halus */}
                         {actsForDate.map(act => {
                           const colorClass = getActivityColor(act.activity);
 
+                          // 1. Mapping Jika Memiliki Segmen / Jeda
                           if (act.segments && act.segments.length > 1) {
                             return act.segments.map((seg, idx) => {
                               if (!seg.start || !seg.end) return null;
@@ -1227,7 +1228,7 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                               const startMins = sParts[0] * 60 + sParts[1];
                               const blockHeight = Math.max(seg.rawMinutes, 15); 
                               return (
-                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${startMins}px`, bottom: sortOrder === 'terbaru' ? `${startMins}px` : 'auto', height: `${blockHeight}px` }}>
                                   <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
                                   {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
                                 </div>
@@ -1235,13 +1236,14 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                             });
                           }
 
+                          // 2. Mapping Jika Aktivitas Normal (Tanpa Jeda)
                           if (!act.startTime || !act.endTime) return null;
                           const sParts = act.startTime.replace('.', ':').split(':').map(Number);
                           const startMins = sParts[0] * 60 + sParts[1];
                           const blockHeight = Math.max(act.rawMinutes, 15);
 
                           return (
-                            <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                            <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${startMins}px`, bottom: sortOrder === 'terbaru' ? `${startMins}px` : 'auto', height: `${blockHeight}px` }}>
                               <p className="font-bold truncate">{act.activity}</p>
                               {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
                             </div>
