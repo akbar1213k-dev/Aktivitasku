@@ -1168,38 +1168,40 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                     return isDarkMode ? themes[index].dark : themes[index].light;
                   };
 
-                  // 4. Render Blok Hari yang Menyambung
+                  // 4. Render Blok Skala 24 Jam bersambung untuk tiap Tanggal
                   return sortedDates.map((dateStr, index) => {
                     const actsForDate = groupedData[dateStr];
                     const isToday = parseDateStr(dateStr).getTime() === new Date().setHours(0,0,0,0);
 
                     return (
-                      <div key={dateStr} className="flex flex-col w-full">
+                      <div key={dateStr} className={`relative w-full h-[1440px] border-b border-dashed ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
                         
-                        {/* --- Garis Batas Pemisah Hari & Tanggal Mengapung (Sticky) --- */}
-                        <div className={`sticky top-0 z-40 w-full flex items-center justify-between px-4 py-2.5 backdrop-blur-md shadow-sm border-b 
-                            ${isDarkMode ? 'bg-gray-900/80 border-b-gray-700 border-t-gray-700' : 'bg-white/80 border-b-gray-200 border-t-gray-200'} 
-                            ${index === 0 ? 'border-t-0 rounded-t-3xl' : 'border-t-[6px]'}`}>
-                           <span className={`text-xs font-black tracking-widest flex items-center gap-2 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`}>
-                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                             {dateStr}
-                           </span>
-                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
-                             {actsForDate.length} Aktv
-                           </span>
+                        {/* --- Garis Batas 00:00 & Tanggal Mengapung (Sticky) --- */}
+                        {/* Diberi h-0 (tinggi nol) dan pointer-events-none agar murni melayang dan tidak memblokir klik aktivitas */}
+                        <div className="sticky top-0 z-40 w-full pointer-events-none h-0">
+                           {/* Garis Pembatas Tipis */}
+                           <div className={`w-full border-t-2 shadow-sm ${isDarkMode ? 'border-orange-500/60' : 'border-orange-500/70'}`}></div>
+                           
+                           {/* Teks Tanggal & Info Aktivitas (Transparan & Mengapung di bawah garis) */}
+                           <div className="flex justify-between items-start px-3 mt-1.5">
+                             <span className={`text-[10px] font-black tracking-widest flex items-center gap-1 backdrop-blur-md px-2 py-0.5 rounded shadow-sm opacity-90 ${isDarkMode ? 'text-orange-300 bg-gray-900/50' : 'text-orange-700 bg-white/60'}`}>
+                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                               {dateStr}
+                             </span>
+                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-md opacity-90 ${isDarkMode ? 'bg-gray-800/60 text-gray-300' : 'bg-gray-200/60 text-gray-700'}`}>
+                               {actsForDate.length} Aktv
+                             </span>
+                           </div>
                         </div>
 
-                        {/* --- AREA TIMELINE 1440px TERPISAH (Aktivitas 00:00 Tidak Tertutup) --- */}
-                        <div className="relative w-full h-[1440px]">
-                          
-                          {/* Garis Penanda Jam (00:00 - 23:00) */}
-                          {Array.from({ length: 24 }).map((_, i) => (
-                            <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
-                              <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                                {i.toString().padStart(2, '0')}:00
-                              </span>
-                            </div>
-                          ))}
+                        {/* Garis Penanda Jam (00:00 - 23:00) */}
+                        {Array.from({ length: 24 }).map((_, i) => (
+                          <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/40' : 'border-gray-200/50'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
+                            <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                              {i.toString().padStart(2, '0')}:00
+                            </span>
+                          </div>
+                        ))}
 
                           {/* Garis Merah Waktu Saat Ini */}
                           {isToday && (
