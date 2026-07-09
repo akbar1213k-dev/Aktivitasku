@@ -986,17 +986,32 @@ export default function App() {
                 </div>
               </div>
               
-              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
-              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
-                value={editingItem.endTime} 
-                disabled={editingItem.segments && editingItem.segments.length > 1}
-                onChange={e => {
-                  const updated = {...editingItem, endTime: e.target.value};
-                  if (updated.segments && updated.segments.length === 1) {
-                     updated.segments[0].end = e.target.value;
-                  }
-                  setEditingItem(updated);
-                }} />
+              {/* --- TANGGAL SELESAI & JAM SELESAI --- */}
+              <div className="grid grid-cols-2 gap-4 mb-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal Selesai</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
+                    value={editingItem.endDate || editingItem.date} 
+                    onChange={e => setEditingItem({...editingItem, endDate: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
+                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                    value={editingItem.endTime} 
+                    disabled={editingItem.segments && editingItem.segments.length > 1}
+                    onChange={e => {
+                      const updated = {...editingItem, endTime: e.target.value};
+                      // Sinkronisasi dengan segmen jika hanya ada 1 sesi
+                      if (updated.segments && updated.segments.length === 1) {
+                         updated.segments[0].end = e.target.value;
+                      }
+                      setEditingItem(updated);
+                    }} 
+                  />
+                </div>
+              </div>
+              {/* --- akhir TANGGAL SELESAI & JAM SELESAI --- */}
 
               {editingItem.segments && editingItem.segments.length > 1 ? (
                  <div className="mb-4 mt-2 bg-orange-50 p-3 rounded-2xl border border-orange-100">
@@ -1041,10 +1056,6 @@ export default function App() {
                 <div className="mb-6"></div>
               )}
               
-              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Selesai</label>
-              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-2 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                value={editingItem.endTime} onChange={e => setEditingItem({...editingItem, endTime: e.target.value})} />
-
               {editingItem.segments && editingItem.segments.length > 1 && (
                  <p className="text-[10px] text-orange-500 italic mb-4 ml-1">*Catatan: Mengedit jam pada aktivitas ber-jeda akan menyatukan sesi.</p>
               )}
