@@ -663,8 +663,13 @@ export default function App() {
   }, {});
 
   return (
-    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
-      <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
+    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'} lg:py-6`}>
+      
+      {/* BUNGKUSAN BARU UNTUK MEMBAGI LAYAR MENJADI DUA (KIRI & KANAN) */}
+      <div className="flex w-full max-w-5xl gap-6 justify-center items-start px-4 lg:px-0">
+        
+        {/* BAGIAN KIRI: APLIKASI UTAMA ANDA (Tetap max-w-md) */}
+        <div className={`w-full max-w-md min-h-screen lg:min-h-[90vh] relative flex flex-col shadow-2xl transition-colors duration-300 lg:rounded-[40px] overflow-hidden ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
         
         {toast && (
           <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
@@ -1215,8 +1220,94 @@ export default function App() {
           </button>
 
         </div>
-
       </div> 
+      {/* AKHIR BAGIAN KIRI */}
+
+
+      {/* ============================================================== */}
+      {/* BAGIAN KANAN: VISUALISASI AKTIVITAS (TIMELINE 24 JAM) */}
+      {/* ============================================================== */}
+      <div className={`hidden lg:flex flex-col flex-1 h-[90vh] rounded-[40px] shadow-2xl transition-colors duration-300 overflow-hidden border sticky top-6 ${isDarkMode ? 'bg-gray-950 text-gray-100 border-gray-800' : 'bg-white text-gray-800 border-gray-100'}`}>
+        
+        {/* Header Timeline */}
+        <div className={`p-6 border-b z-10 shadow-sm ${isDarkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-100 bg-white'}`}>
+          <h2 className="text-2xl font-extrabold flex items-center gap-2">
+            <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Visualisasi 24 Jam
+          </h2>
+          <p className="text-sm font-medium text-gray-500 mt-1">
+            Menampilkan {filteredData.length} aktivitas ({dateFilter === 'today' ? 'Hari Ini' : dateFilter === 'all' ? 'Semua Waktu' : 'Tanggal Custom'})
+          </p>
+        </div>
+
+        {/* Area Scroll Timeline */}
+        <div className="flex-1 overflow-y-auto relative bg-gradient-to-b from-transparent to-gray-50/50 dark:to-gray-900/50">
+          <div className="relative w-full h-[1440px]">
+            
+            {/* Garis Penanda Jam (00:00 - 23:00) */}
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
+                <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                  {i.toString().padStart(2, '0')}:00
+                </span>
+              </div>
+            ))}
+
+            {/* Garis Merah Waktu Saat Ini */}
+            {dateFilter === 'today' && (
+              <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
+                 <div className="w-2 h-2 rounded-full bg-red-500 ml-1"></div>
+              </div>
+            )}
+
+            {/* Render Blok Aktivitas */}
+            {filteredData.map(act => {
+              
+              if (act.segments && act.segments.length > 1) {
+                return act.segments.map((seg, idx) => {
+                  if (!seg.start || !seg.end) return null;
+                  const sParts = seg.start.replace('.', ':').split(':').map(Number);
+                  const startMins = sParts[0] * 60 + sParts[1];
+                  const blockHeight = Math.max(seg.rawMinutes, 15); 
+                  
+                  return (
+                    <div key={`${act.id}-${idx}`} 
+                         className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${isDarkMode ? 'bg-orange-500/20 border-orange-500/30 text-orange-300' : 'bg-orange-100 border-orange-200 text-orange-800'}`}
+                         style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                      <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
+                      {blockHeight > 25 && <p className="opacity-80 text-[10px]">{seg.start} - {seg.end}</p>}
+                    </div>
+                  );
+                });
+              }
+
+              if (!act.startTime || !act.endTime) return null;
+              const sParts = act.startTime.replace('.', ':').split(':').map(Number);
+              const startMins = sParts[0] * 60 + sParts[1];
+              const blockHeight = Math.max(act.rawMinutes, 15);
+
+              const isProductive = act.category && act.category.toLowerCase().includes('produktif') && !act.category.toLowerCase().includes('non');
+              let colorClass = isDarkMode ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800';
+              if (isProductive) {
+                 colorClass = isDarkMode ? 'bg-green-500/20 border-green-500/30 text-green-300' : 'bg-green-50 border-green-200 text-green-800';
+              }
+
+              return (
+                <div key={act.id} 
+                     className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${colorClass}`}
+                     style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                  <p className="font-bold truncate">{act.activity}</p>
+                  {blockHeight > 25 && <p className="opacity-80 text-[10px]">{act.startTime} - {act.endTime}</p>}
+                </div>
+              );
+            })}
+
+          </div>
+        </div>
+      </div>
+      {/* AKHIR BAGIAN KANAN */}
+
+      </div>
     </div> 
   );
 }
