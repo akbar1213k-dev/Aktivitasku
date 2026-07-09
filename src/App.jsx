@@ -1104,6 +1104,7 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
           {/* --- TAB VISUALISASI 24 JAM (BARU) --- */}
           {activeTab === 'visual' && (
             <div className="space-y-4 animate-in fade-in duration-300">
+              {/* Header Tab Visual */}
               <div className="flex justify-between items-center mb-6">
                 <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Visual 24 Jam</h2>
                 <select 
@@ -1117,6 +1118,7 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                 </select>
               </div>
 
+              {/* Input Tanggal Custom */}
               {dateFilter === 'custom' && (
                 <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
                   <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
@@ -1125,55 +1127,111 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                 </div>
               )}
 
-              <div className={`relative w-full h-[1440px] rounded-3xl overflow-hidden shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
-                    <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                      {i.toString().padStart(2, '0')}:00
-                    </span>
-                  </div>
-                ))}
+              {/* Kontainer Timeline Multi-Hari */}
+              <div className="flex flex-col gap-6 pb-10">
+                {(() => {
+                  // 1. Kelompokkan aktivitas berdasarkan Tanggal (Date)
+                  const groupedData = {};
+                  filteredData.forEach(act => {
+                     if (!groupedData[act.date]) groupedData[act.date] = [];
+                     groupedData[act.date].push(act);
+                  });
 
-                {dateFilter === 'today' && (
-                  <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
-                     <div className="w-2 h-2 rounded-full bg-red-500 ml-1"></div>
-                  </div>
-                )}
+                  // 2. Urutkan tanggal dari yang TERBARU ke yang TERLAMA (Descending)
+                  const sortedDates = Object.keys(groupedData).sort((a, b) => {
+                     return parseDateStr(b).getTime() - parseDateStr(a).getTime();
+                  });
 
-                {filteredData.map(act => {
-                  if (act.segments && act.segments.length > 1) {
-                    return act.segments.map((seg, idx) => {
-                      if (!seg.start || !seg.end) return null;
-                      const sParts = seg.start.replace('.', ':').split(':').map(Number);
-                      const startMins = sParts[0] * 60 + sParts[1];
-                      const blockHeight = Math.max(seg.rawMinutes, 15); 
-                      return (
-                        <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${isDarkMode ? 'bg-orange-500/20 border-orange-500/30 text-orange-300' : 'bg-orange-100 border-orange-200 text-orange-800'}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                          <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
-                          {blockHeight > 25 && <p className="opacity-80 text-[10px]">{seg.start} - {seg.end}</p>}
+                  // Jika tidak ada data
+                  if (sortedDates.length === 0) {
+                     return (
+                        <div className="flex flex-col items-center justify-center text-gray-400 mt-20">
+                          <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                          <p className="font-medium text-sm">Belum ada data visual</p>
                         </div>
-                      );
-                    });
+                     );
                   }
 
-                  if (!act.startTime || !act.endTime) return null;
-                  const sParts = act.startTime.replace('.', ':').split(':').map(Number);
-                  const startMins = sParts[0] * 60 + sParts[1];
-                  const blockHeight = Math.max(act.rawMinutes, 15);
-                  const isProductive = act.category && act.category.toLowerCase().includes('produktif') && !act.category.toLowerCase().includes('non');
-                  let colorClass = isDarkMode ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800';
-                  if (isProductive) colorClass = isDarkMode ? 'bg-green-500/20 border-green-500/30 text-green-300' : 'bg-green-50 border-green-200 text-green-800';
+                  // 3. Render blok 24 Jam (1440px) untuk masing-masing hari
+                  return sortedDates.map(dateStr => {
+                    const actsForDate = groupedData[dateStr];
+                    const isToday = parseDateStr(dateStr).getTime() === new Date().setHours(0,0,0,0);
 
-                  return (
-                    <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                      <p className="font-bold truncate">{act.activity}</p>
-                      {blockHeight > 25 && <p className="opacity-80 text-[10px]">{act.startTime} - {act.endTime}</p>}
-                    </div>
-                  );
-                })}
+                    return (
+                      <div key={dateStr} className={`relative w-full rounded-3xl overflow-hidden shadow-sm border flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                        
+                        {/* Header Pemisah Tanggal */}
+                        <div className={`sticky top-0 z-40 px-4 py-3 border-b flex justify-between items-center backdrop-blur-md shadow-sm ${isDarkMode ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-gray-100'}`}>
+                          <span className={`font-black text-sm flex items-center gap-1.5 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            {dateStr}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
+                            {actsForDate.length} Aktivitas
+                          </span>
+                        </div>
+
+                        {/* Garis Skala 24 Jam */}
+                        <div className="relative w-full h-[1440px]">
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
+                              <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                {i.toString().padStart(2, '0')}:00
+                              </span>
+                            </div>
+                          ))}
+
+                          {/* Garis Penanda Waktu Saat Ini (Hanya di Blok Hari Ini) */}
+                          {isToday && (
+                            <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
+                               <div className="w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                            </div>
+                          )}
+
+                          {/* Render Kotak Aktivitas */}
+                          {actsForDate.map(act => {
+                            if (act.segments && act.segments.length > 1) {
+                              return act.segments.map((seg, idx) => {
+                                if (!seg.start || !seg.end) return null;
+                                const sParts = seg.start.replace('.', ':').split(':').map(Number);
+                                const startMins = sParts[0] * 60 + sParts[1];
+                                const blockHeight = Math.max(seg.rawMinutes, 15); 
+                                return (
+                                  <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${isDarkMode ? 'bg-orange-500/20 border-orange-500/30 text-orange-300' : 'bg-orange-100 border-orange-200 text-orange-800'}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                                    <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
+                                    {blockHeight > 25 && <p className="opacity-80 text-[10px]">{seg.start} - {seg.end}</p>}
+                                  </div>
+                                );
+                              });
+                            }
+
+                            if (!act.startTime || !act.endTime) return null;
+                            const sParts = act.startTime.replace('.', ':').split(':').map(Number);
+                            const startMins = sParts[0] * 60 + sParts[1];
+                            const blockHeight = Math.max(act.rawMinutes, 15);
+                            
+                            // Warna Berdasarkan Kategori
+                            const isProductive = act.category && act.category.toLowerCase().includes('produktif') && !act.category.toLowerCase().includes('non');
+                            let colorClass = isDarkMode ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800';
+                            if (isProductive) colorClass = isDarkMode ? 'bg-green-500/20 border-green-500/30 text-green-300' : 'bg-green-50 border-green-200 text-green-800';
+
+                            return (
+                              <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                                <p className="font-bold truncate">{act.activity}</p>
+                                {blockHeight > 25 && <p className="opacity-80 text-[10px]">{act.startTime} - {act.endTime}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}
+
+        {/* --- KODE MODAL EDIT AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
 
         {/* --- KODE MODAL EDIT AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {editingItem && (
