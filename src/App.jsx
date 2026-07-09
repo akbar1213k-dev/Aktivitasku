@@ -1128,28 +1128,41 @@ export default function App() {
 
         </div> 
 
-        {/* --- KODE MODAL TAMBAH AKTIVITAS YANG HILANG --- */}
+        {/* --- KODE MODAL TAMBAH AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {isModalOpen && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-              <h3 className="text-xl font-extrabold text-gray-800 mb-2">Tambah Aktivitas</h3>
-              <p className="text-xs text-gray-500 mb-4">Paste format teks Anda di bawah ini:</p>
+            <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+              <h3 className={`text-xl font-extrabold mb-2 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tambah Aktivitas</h3>
+              <p className={`text-xs mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Paste format teks Anda di bawah ini:</p>
               
+              {/* Textarea dengan deteksi Dark Mode */}
               <textarea 
-                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-2xl h-40 mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-mono text-xs resize-none"
+                className={`w-full border p-4 rounded-2xl h-40 mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-mono text-xs resize-none ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800 placeholder-gray-400'}`}
                 placeholder="Contoh:&#10;[12/10 12.00] : Mulai aktivitas..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
               />
               
               <div className="flex gap-3 mb-4">
-                <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
-                <button onClick={handleParse} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan Data</button>
+                <button 
+                  onClick={() => setIsModalOpen(false)} 
+                  className={`flex-1 py-3.5 rounded-2xl font-bold transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                  Batal
+                </button>
+                <button 
+                  onClick={handleParse} 
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">
+                  Simpan Data
+                </button>
               </div>
 
-              <div className="flex gap-3 border-t border-gray-100 pt-4">
-                <button onClick={handleExport} className="flex-1 text-xs font-bold text-gray-500 bg-gray-50 py-2 rounded-xl hover:bg-gray-100">Export JSON</button>
-                <label className="flex-1 text-xs font-bold text-gray-500 bg-gray-50 py-2 rounded-xl hover:bg-gray-100 text-center cursor-pointer">
+              <div className={`flex gap-3 border-t pt-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                <button 
+                  onClick={handleExport} 
+                  className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-50 hover:bg-gray-100 text-gray-500'}`}>
+                  Export JSON
+                </button>
+                <label className={`flex-1 text-xs font-bold py-2 rounded-xl text-center cursor-pointer transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-50 hover:bg-gray-100 text-gray-500'}`}>
                   Import JSON
                   <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
                 </label>
@@ -1157,6 +1170,7 @@ export default function App() {
             </div>
           </div>
         )}
+        {/* --- BATAS KODE MODAL TAMBAH AKTIVITAS --- */}
 
        {/* --- KODE NAVIGASI BAWAH YANG DIPERBARUI --- */}
         {/* --- KODE NAVIGASI BAWAH YANG BARU (DENGAN TOMBOL SETTINGS) --- */}
