@@ -1125,8 +1125,8 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                 </div>
               )}
 
-              {/* KONTAINER UTAMA TIMELINE */}
-              <div className={`relative w-full rounded-3xl overflow-hidden shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+              {/* KONTAINER UTAMA TIMELINE BERSAMBUNG */}
+              <div className={`relative w-full rounded-3xl shadow-inner border flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 {(() => {
                   // 1. Kelompokkan aktivitas berdasarkan Tanggal
                   const groupedData = {};
@@ -1135,12 +1135,12 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                     groupedData[act.date].push(act);
                   });
 
-                  // 2. Urutkan tanggal secara kronologis (Terlama di atas, Terbaru di bawah) agar scroll natural
+                  // 2. Urutkan tanggal secara kronologis agar scroll ke bawah terasa natural (waktu maju)
                   const sortedDates = Object.keys(groupedData).sort((a, b) => {
                     return parseDateStr(a).getTime() - parseDateStr(b).getTime();
                   });
 
-                  // Tampilan jika kosong
+                  // Tampilan jika tidak ada data
                   if (sortedDates.length === 0) {
                      return (
                         <div className="flex flex-col items-center justify-center text-gray-400 py-24">
@@ -1150,90 +1150,97 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
                      );
                   }
 
-                  // 3. Fungsi Pembuat Warna Lembut (Otomatis beda per Nama Aktivitas)
+                  // 3. Fungsi Warna Sangat Tipis (Pastel Lembut)
                   const getActivityColor = (text) => {
                     let hash = 0;
                     for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
                     const themes = [
-                      { light: 'bg-blue-50/90 border-blue-200 text-blue-800', dark: 'bg-blue-900/30 border-blue-800/50 text-blue-300' },
-                      { light: 'bg-indigo-50/90 border-indigo-200 text-indigo-800', dark: 'bg-indigo-900/30 border-indigo-800/50 text-indigo-300' },
-                      { light: 'bg-purple-50/90 border-purple-200 text-purple-800', dark: 'bg-purple-900/30 border-purple-800/50 text-purple-300' },
-                      { light: 'bg-rose-50/90 border-rose-200 text-rose-800', dark: 'bg-rose-900/30 border-rose-800/50 text-rose-300' },
-                      { light: 'bg-orange-50/90 border-orange-200 text-orange-800', dark: 'bg-orange-900/30 border-orange-800/50 text-orange-300' },
-                      { light: 'bg-emerald-50/90 border-emerald-200 text-emerald-800', dark: 'bg-emerald-900/30 border-emerald-800/50 text-emerald-300' },
-                      { light: 'bg-teal-50/90 border-teal-200 text-teal-800', dark: 'bg-teal-900/30 border-teal-800/50 text-teal-300' },
-                      { light: 'bg-cyan-50/90 border-cyan-200 text-cyan-800', dark: 'bg-cyan-900/30 border-cyan-800/50 text-cyan-300' }
+                      { light: 'bg-blue-50 border-blue-200 text-blue-800', dark: 'bg-blue-900/20 border-blue-800/40 text-blue-300' },
+                      { light: 'bg-indigo-50 border-indigo-200 text-indigo-800', dark: 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' },
+                      { light: 'bg-purple-50 border-purple-200 text-purple-800', dark: 'bg-purple-900/20 border-purple-800/40 text-purple-300' },
+                      { light: 'bg-rose-50 border-rose-200 text-rose-800', dark: 'bg-rose-900/20 border-rose-800/40 text-rose-300' },
+                      { light: 'bg-orange-50 border-orange-200 text-orange-800', dark: 'bg-orange-900/20 border-orange-800/40 text-orange-300' },
+                      { light: 'bg-emerald-50 border-emerald-200 text-emerald-800', dark: 'bg-emerald-900/20 border-emerald-800/40 text-emerald-300' },
+                      { light: 'bg-teal-50 border-teal-200 text-teal-800', dark: 'bg-teal-900/20 border-teal-800/40 text-teal-300' },
+                      { light: 'bg-cyan-50 border-cyan-200 text-cyan-800', dark: 'bg-cyan-900/20 border-cyan-800/40 text-cyan-300' }
                     ];
                     const index = Math.abs(hash) % themes.length;
                     return isDarkMode ? themes[index].dark : themes[index].light;
                   };
 
-                  // 4. Render Blok Skala 24 Jam bersambung untuk tiap Tanggal
-                  return sortedDates.map((dateStr) => {
+                  // 4. Render Blok Hari yang Menyambung
+                  return sortedDates.map((dateStr, index) => {
                     const actsForDate = groupedData[dateStr];
                     const isToday = parseDateStr(dateStr).getTime() === new Date().setHours(0,0,0,0);
 
                     return (
-                      <div key={dateStr} className="relative w-full h-[1440px]">
+                      <div key={dateStr} className="flex flex-col w-full">
                         
-                        {/* --- Garis Batas 00:00 & Tanggal Mengapung (Sticky) --- */}
-                        <div className={`sticky top-0 z-40 w-full flex items-center justify-between px-4 py-1.5 backdrop-blur-md border-b-2 shadow-sm ${isDarkMode ? 'bg-gray-900/80 border-gray-600' : 'bg-white/80 border-gray-300'}`}>
-                           <span className={`text-[11px] font-black tracking-widest ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {/* --- Garis Batas Pemisah Hari & Tanggal Mengapung (Sticky) --- */}
+                        <div className={`sticky top-0 z-40 w-full flex items-center justify-between px-4 py-2.5 backdrop-blur-md shadow-sm border-b 
+                            ${isDarkMode ? 'bg-gray-900/80 border-b-gray-700 border-t-gray-700' : 'bg-white/80 border-b-gray-200 border-t-gray-200'} 
+                            ${index === 0 ? 'border-t-0 rounded-t-3xl' : 'border-t-[6px]'}`}>
+                           <span className={`text-xs font-black tracking-widest flex items-center gap-2 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`}>
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                              {dateStr}
                            </span>
-                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
                              {actsForDate.length} Aktv
                            </span>
                         </div>
 
-                        {/* Garis Penanda Jam (01:00 - 23:00) -> 00:00 sudah diwakili batas sticky di atas */}
-                        {Array.from({ length: 23 }).map((_, i) => (
-                          <div key={i+1} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${(i + 1) * 60}px`, height: '60px' }}>
-                            <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                              {(i + 1).toString().padStart(2, '0')}:00
-                            </span>
-                          </div>
-                        ))}
-
-                        {/* Garis Merah Waktu Saat Ini */}
-                        {isToday && (
-                          <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
-                             <div className="w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
-                          </div>
-                        )}
-
-                        {/* Render Kotak Aktivitas dengan Warna Halus */}
-                        {actsForDate.map(act => {
-                          const colorClass = getActivityColor(act.activity);
-
-                          if (act.segments && act.segments.length > 1) {
-                            return act.segments.map((seg, idx) => {
-                              if (!seg.start || !seg.end) return null;
-                              const sParts = seg.start.replace('.', ':').split(':').map(Number);
-                              const startMins = sParts[0] * 60 + sParts[1];
-                              const blockHeight = Math.max(seg.rawMinutes, 15); 
-                              return (
-                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                                  <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
-                                  {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
-                                </div>
-                              );
-                            });
-                          }
-
-                          if (!act.startTime || !act.endTime) return null;
-                          const sParts = act.startTime.replace('.', ':').split(':').map(Number);
-                          const startMins = sParts[0] * 60 + sParts[1];
-                          const blockHeight = Math.max(act.rawMinutes, 15);
-
-                          return (
-                            <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
-                              <p className="font-bold truncate">{act.activity}</p>
-                              {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
+                        {/* --- AREA TIMELINE 1440px TERPISAH (Aktivitas 00:00 Tidak Tertutup) --- */}
+                        <div className="relative w-full h-[1440px]">
+                          
+                          {/* Garis Penanda Jam (00:00 - 23:00) */}
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <div key={i} className={`absolute w-full flex items-start border-t ${isDarkMode ? 'border-gray-800/60' : 'border-gray-200/60'}`} style={{ top: `${i * 60}px`, height: '60px' }}>
+                              <span className={`text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                {i.toString().padStart(2, '0')}:00
+                              </span>
                             </div>
-                          );
-                        })}
+                          ))}
 
+                          {/* Garis Merah Waktu Saat Ini */}
+                          {isToday && (
+                            <div className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: `${new Date().getHours() * 60 + new Date().getMinutes()}px` }}>
+                               <div className="w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                            </div>
+                          )}
+
+                          {/* Render Kotak Aktivitas dengan Warna Halus */}
+                          {actsForDate.map(act => {
+                            const colorClass = getActivityColor(act.activity);
+
+                            if (act.segments && act.segments.length > 1) {
+                              return act.segments.map((seg, idx) => {
+                                if (!seg.start || !seg.end) return null;
+                                const sParts = seg.start.replace('.', ':').split(':').map(Number);
+                                const startMins = sParts[0] * 60 + sParts[1];
+                                const blockHeight = Math.max(seg.rawMinutes, 15); 
+                                return (
+                                  <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-90 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                                    <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
+                                    {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
+                                  </div>
+                                );
+                              });
+                            }
+
+                            if (!act.startTime || !act.endTime) return null;
+                            const sParts = act.startTime.replace('.', ':').split(':').map(Number);
+                            const startMins = sParts[0] * 60 + sParts[1];
+                            const blockHeight = Math.max(act.rawMinutes, 15);
+
+                            return (
+                              <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-90 hover:opacity-100 ${colorClass}`} style={{ top: `${startMins}px`, height: `${blockHeight}px` }}>
+                                <p className="font-bold truncate">{act.activity}</p>
+                                {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
+                              </div>
+                            );
+                          })}
+
+                        </div>
                       </div>
                     );
                   });
@@ -1241,7 +1248,7 @@ const sortedHomeData = [...filteredData].sort((a, b) => {
               </div>
             </div>
           )}
-          {/* --- BATAS KODE TAB VISUALISASI --- */}
+          {/* --- BATAS KODE TAB VISUALISASI MULTI-HARI --- */}
           
         {/* --- KODE MODAL EDIT AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {editingItem && (
