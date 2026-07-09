@@ -952,28 +952,40 @@ export default function App() {
             </div>
           )}
 
+        {/* --- KODE MODAL EDIT AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {editingItem && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-              <h3 className="text-xl font-extrabold text-gray-800 mb-5">Edit Aktivitas</h3>
+            <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+              <h3 className={`text-xl font-extrabold mb-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Edit Aktivitas</h3>
               
-              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Nama Aktivitas</label>
-              <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                value={editingItem.activity} onChange={e => setEditingItem({...editingItem, activity: e.target.value})} />
+              <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Nama Aktivitas</label>
+              <input 
+                className={`w-full border p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                value={editingItem.activity} 
+                onChange={e => setEditingItem({...editingItem, activity: e.target.value})} 
+              />
               
-              <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Kategori (Ketik atau Pilih)</label>
-              <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                value={editingItem.category || ''} placeholder="Misal: Produktif" onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
+              <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Kategori (Ketik atau Pilih)</label>
+              <input list="category-list" 
+                className={`w-full border p-3.5 rounded-2xl mb-4 focus:ring-2 focus:ring-orange-500 outline-none font-medium transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800 placeholder-gray-400'}`}
+                value={editingItem.category || ''} 
+                placeholder="Misal: Produktif" 
+                onChange={e => setEditingItem({...editingItem, category: e.target.value})} 
+              />
               
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Tanggal</label>
-                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                    value={editingItem.date} onChange={e => setEditingItem({...editingItem, date: e.target.value})} />
+                  <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Tanggal Mulai</label>
+                  <input 
+                    className={`w-full border p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                    value={editingItem.date} 
+                    onChange={e => setEditingItem({...editingItem, date: e.target.value})} 
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Jam Mulai</label>
-                  <input className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 disabled:bg-gray-200" 
+                  <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Jam Mulai</label>
+                  <input 
+                    className={`w-full border p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
                     value={editingItem.startTime} 
                     disabled={editingItem.segments && editingItem.segments.length > 1}
                     onChange={e => {
@@ -982,9 +994,97 @@ export default function App() {
                          updated.segments[0].start = e.target.value;
                       }
                       setEditingItem(updated);
-                    }} />
+                    }} 
+                  />
                 </div>
               </div>
+              
+              <div className="grid grid-cols-2 gap-4 mb-2">
+                <div>
+                  <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Tanggal Selesai</label>
+                  <input 
+                    className={`w-full border p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                    value={editingItem.endDate || editingItem.date} 
+                    onChange={e => setEditingItem({...editingItem, endDate: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-bold mb-1 ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Jam Selesai</label>
+                  <input 
+                    className={`w-full border p-3.5 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-medium disabled:opacity-50 transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                    value={editingItem.endTime} 
+                    disabled={editingItem.segments && editingItem.segments.length > 1}
+                    onChange={e => {
+                      const updated = {...editingItem, endTime: e.target.value};
+                      if (updated.segments && updated.segments.length === 1) {
+                         updated.segments[0].end = e.target.value;
+                      }
+                      setEditingItem(updated);
+                    }} 
+                  />
+                </div>
+              </div>
+
+              {editingItem.segments && editingItem.segments.length > 1 ? (
+                 <div className={`mb-4 mt-2 p-3 rounded-2xl border ${isDarkMode ? 'bg-orange-900/20 border-orange-500/30' : 'bg-orange-50 border-orange-100'}`}>
+                    <p className={`text-xs font-bold mb-2 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`}>Edit Waktu Per Sesi</p>
+                    {editingItem.segments.map((seg, i) => (
+                      <div key={i} className="flex gap-2 mb-2 items-center">
+                        <input className={`w-full border p-2 rounded-xl text-xs outline-none font-medium ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-800'}`} value={seg.start} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].start = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            startTime: newSegs[0].start
+                          });
+                        }} />
+                        <span className="text-gray-400 font-bold">-</span>
+                        <input className={`w-full border p-2 rounded-xl text-xs outline-none font-medium ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-800'}`} value={seg.end} onChange={e => {
+                          const newSegs = [...editingItem.segments];
+                          newSegs[i].end = e.target.value;
+                          setEditingItem({
+                            ...editingItem, 
+                            segments: newSegs,
+                            endTime: newSegs[newSegs.length - 1].end
+                          });
+                        }} />
+                        <button className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-red-400 hover:bg-red-500/20' : 'text-red-500 hover:bg-red-50'}`} onClick={() => {
+                          if (editingItem.segments.length <= 1) return;
+                          const newSegs = editingItem.segments.filter((_, idx) => idx !== i);
+                          setEditingItem({
+                             ...editingItem, 
+                             segments: newSegs,
+                             startTime: newSegs.length > 0 ? newSegs[0].start : editingItem.startTime,
+                             endTime: newSegs.length > 0 ? newSegs[newSegs.length - 1].end : editingItem.endTime
+                          });
+                        }}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                      </div>
+                    ))}
+                 </div>
+              ) : (
+                <div className="mb-6"></div>
+              )}
+              
+              {editingItem.segments && editingItem.segments.length > 1 && (
+                 <p className="text-[10px] text-orange-500 italic mb-4 ml-1">*Catatan: Mengedit jam pada aktivitas ber-jeda akan menyatukan sesi.</p>
+              )}
+              {!(editingItem.segments && editingItem.segments.length > 1) && <div className="mb-6"></div>}
+
+              <div className="flex gap-3 mb-4">
+                <button onClick={() => setEditingItem(null)} className={`flex-1 py-3.5 rounded-2xl font-bold transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>Batal</button>
+                <button onClick={handleSaveEdit} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan</button>
+              </div>
+
+              <div className={`border-t pt-3 ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                <button onClick={handleDelete} className={`w-full font-bold py-3 rounded-2xl transition-colors ${isDarkMode ? 'text-red-400 hover:bg-red-500/10' : 'text-red-500 hover:bg-red-50'}`}>Hapus Aktivitas</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* --- BATAS KODE MODAL EDIT AKTIVITAS --- */}
               
               {/* --- TANGGAL SELESAI & JAM SELESAI --- */}
               <div className="grid grid-cols-2 gap-4 mb-2">
@@ -1073,23 +1173,29 @@ export default function App() {
           </div>
         )}
 
+        {/* --- KODE MODAL KATEGORI (SUDAH SUPPORT DARK MODE) --- */}
         {categoryModalOpen && (
           <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-               <h3 className="text-xl font-extrabold text-gray-800 mb-2">Tetapkan Kategori</h3>
-               <p className="text-xs text-gray-500 mb-5">Terapkan ke {selectedItems.length} aktivitas yang dipilih.</p>
+            <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+               <h3 className={`text-xl font-extrabold mb-2 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tetapkan Kategori</h3>
+               <p className={`text-xs mb-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Terapkan ke {selectedItems.length} aktivitas yang dipilih.</p>
 
-               <input list="category-list" className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-2xl mb-6 focus:ring-2 focus:ring-orange-500 outline-none font-medium" 
-                value={bulkCategory} placeholder="Ketik atau pilih kategori..." onChange={e => setBulkCategory(e.target.value)} />
+               <input list="category-list" 
+                className={`w-full border p-3.5 rounded-2xl mb-6 focus:ring-2 focus:ring-orange-500 outline-none font-medium transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-800 placeholder-gray-400'}`} 
+                value={bulkCategory} 
+                placeholder="Ketik atau pilih kategori..." 
+                onChange={e => setBulkCategory(e.target.value)} 
+               />
                
                <div className="flex gap-3">
-                <button onClick={() => setCategoryModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3.5 rounded-2xl font-bold transition-colors">Batal</button>
+                <button onClick={() => setCategoryModalOpen(false)} className={`flex-1 py-3.5 rounded-2xl font-bold transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>Batal</button>
                 <button onClick={handleBulkCategory} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors">Simpan Kategori</button>
               </div>
             </div>
           </div>
         )}
-
+      
+        {/* --- BATAS KODE MODAL KATEGORI --- */}
           {/* --- TAMBAHKAN MULAI DARI SINI: TOOLBAR SELEKSI --- */}
         {/* --- KODE TOOLBAR SELEKSI YANG DIPERBARUI (DENGAN TOMBOL GABUNG) --- */}
         {isSelectionMode && selectedItems.length > 0 && (
