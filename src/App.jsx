@@ -294,13 +294,13 @@ export default function App() {
     if (!auth) return;
     try {
       await signOut(auth);
-      setUser(null); // Menghapus sesi
+      setUser(null); // 1. Menghapus sesi Cloud
       
-      // Muat ulang Aktivitas dari mode lokal
+      // 2. Muat ulang Aktivitas dari mode lokal
       const savedData = localStorage.getItem('offline_activities');
       setParsedData(savedData ? JSON.parse(savedData) : []);
       
-      // Muat ulang Catatan dari mode lokal
+      // 3. Muat ulang Catatan dari mode lokal (KODE BARU YANG DITAMBAHKAN)
       const savedNotes = localStorage.getItem('appNotes');
       setAppNotes(savedNotes ? JSON.parse(savedNotes) : []);
 
