@@ -71,6 +71,39 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sortOrder', sortOrder);
   }, [sortOrder]);
+
+  // --- STATE UNTUK CATATAN APLIKASI ---
+  const [appNotes, setAppNotes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('appNotes');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      return [];
+    }
+  });
+  const [newNoteText, setNewNoteText] = useState('');
+
+  // Simpan catatan otomatis tiap ada perubahan
+  useEffect(() => {
+    localStorage.setItem('appNotes', JSON.stringify(appNotes));
+  }, [appNotes]);
+
+  // Fungsi Kirim Catatan
+  const handleAddNote = () => {
+    if (!newNoteText.trim()) return;
+    const note = {
+      id: Date.now(),
+      text: newNoteText,
+      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' • ' + new Date().toLocaleDateString()
+    };
+    setAppNotes([...appNotes, note]);
+    setNewNoteText('');
+  };
+
+  // Fungsi Hapus Catatan
+  const handleDeleteNote = (id) => {
+    setAppNotes(appNotes.filter(note => note.id !== id));
+  };
   
   // --- STATE UNTUK LOGIN ---
   const [loginEmail, setLoginEmail] = useState('');
@@ -1170,6 +1203,64 @@ export default function App() {
                   </div>
                 )}
               </div>
+              
+              {/* --- CATATAN APLIKASI (STYLE CHAT) --- */}
+              <div className={`p-5 rounded-3xl shadow-sm border flex flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700 text-blue-400' : 'bg-blue-50 text-blue-500'}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Catatan Pribadi</h3>
+                    <p className="text-xs text-gray-400 font-medium">Tersimpan di perangkat ini</p>
+                  </div>
+                </div>
+
+                {/* Area Chat */}
+                <div className={`flex flex-col gap-3 h-64 overflow-y-auto p-4 rounded-2xl mb-4 border shadow-inner ${isDarkMode ? 'bg-gray-900/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  {appNotes.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-60">
+                      <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                      <span className="text-xs font-bold">Belum ada catatan</span>
+                    </div>
+                  ) : (
+                    appNotes.map(note => (
+                      <div key={note.id} className="flex justify-end group items-center gap-2">
+                        {/* Tombol Hapus (Muncul saat disentuh/diarahkan kursor) */}
+                        <button onClick={() => handleDeleteNote(note.id)} className="p-2 bg-red-100 hover:bg-red-200 text-red-500 rounded-full lg:opacity-0 group-hover:opacity-100 transition-opacity dark:bg-red-500/20 dark:hover:bg-red-500/40 active:scale-90">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                        
+                        {/* Bubble Chat */}
+                        <div className={`relative max-w-[80%] p-3.5 rounded-[20px] rounded-tr-sm shadow-sm ${isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'}`}>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{note.text}</p>
+                          <p className="text-[9px] text-right mt-2 opacity-70 font-bold tracking-wider">{note.date}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Input Chat */}
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Ketik catatan di sini..." 
+                    value={newNoteText}
+                    onChange={(e) => setNewNoteText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
+                    className={`flex-1 border rounded-2xl px-4 py-3 outline-none text-sm font-medium focus:ring-2 focus:ring-blue-500 transition-colors ${isDarkMode ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-200 text-gray-800 placeholder-gray-400'}`}
+                  />
+                  <button 
+                    onClick={handleAddNote}
+                    className="bg-blue-500 hover:bg-blue-600 text-white w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shrink-0 shadow-md active:scale-95"
+                  >
+                    <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+              {/* --- BATAS KODE CATATAN APLIKASI --- */}
+              
             </div>
           )}
 
