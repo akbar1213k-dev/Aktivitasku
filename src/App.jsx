@@ -72,7 +72,7 @@ export default function App() {
     localStorage.setItem('sortOrder', sortOrder);
   }, [sortOrder]);
 
-  // --- STATE UNTUK CATATAN APLIKASI ---
+ // --- STATE UNTUK CATATAN APLIKASI ---
   const [appNotes, setAppNotes] = useState(() => {
     try {
       const saved = localStorage.getItem('appNotes');
@@ -83,26 +83,52 @@ export default function App() {
   });
   const [newNoteText, setNewNoteText] = useState('');
 
-  // Simpan catatan otomatis tiap ada perubahan
+  // 1. Simpan catatan otomatis ke memori lokal (Sebagai Backup Offline/Instan)
   useEffect(() => {
     localStorage.setItem('appNotes', JSON.stringify(appNotes));
   }, [appNotes]);
 
-  // Fungsi Kirim Catatan
-  const handleAddNote = () => {
+  // 2. Fungsi Kirim Catatan (Lokal dulu -> baru Cloud)
+  const handleAddNote = async () => {
     if (!newNoteText.trim()) return;
+    const noteId = Date.now().toString(); // Gunakan string untuk ID Firebase
     const note = {
-      id: Date.now(),
+      id: noteId,
       text: newNoteText,
       date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' • ' + new Date().toLocaleDateString()
     };
+    
+    // Simpan ke layar & lokal seketika (Tanpa Loading)
     setAppNotes([...appNotes, note]);
     setNewNoteText('');
+
+    // Sinkronisasi ke Cloud Firebase jika sedang Login
+    if (user && db) {
+      try {
+        const batch = writeBatch(db);
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', noteId);
+        batch.set(docRef, note);
+        await batch.commit();
+      } catch(e) {
+        console.warn('Gagal sinkronisasi catatan ke cloud, disimpan di lokal.', e);
+      }
+    }
   };
 
-  // Fungsi Hapus Catatan
-  const handleDeleteNote = (id) => {
+  // 3. Fungsi Hapus Catatan (Lokal dulu -> baru Cloud)
+  const handleDeleteNote = async (id) => {
+    // Hapus dari layar & lokal seketika
     setAppNotes(appNotes.filter(note => note.id !== id));
+
+    // Hapus dari Cloud Firebase jika sedang Login
+    if (user && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id.toString());
+        await deleteDoc(docRef);
+      } catch(e) {
+        console.warn('Gagal hapus catatan di cloud.', e);
+      }
+    }
   };
   
   // --- STATE UNTUK LOGIN ---
@@ -158,15 +184,32 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !db) return;
+    
+    // 1. Listener Sinkronisasi Aktivitas
     const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'activities');
-    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+    const unsubscribeActivities = onSnapshot(colRef, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       data.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       setParsedData(data);
     }, (error) => {
       console.error("Firestore error:", error);
     });
-    return () => unsubscribe();
+
+    // 2. Listener Sinkronisasi Catatan (Baru)
+    const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
+    const unsubscribeNotes = onSnapshot(notesRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Urutkan berdasarkan waktu buat (karena ID kita menggunakan Date.now)
+      data.sort((a, b) => Number(a.id) - Number(b.id));
+      setAppNotes(data);
+    }, (error) => {
+      console.error("Firestore notes error:", error);
+    });
+
+    return () => {
+       unsubscribeActivities();
+       unsubscribeNotes();
+    };
   }, [user]);
 
   const handleLoginGoogle = async () => {
@@ -252,9 +295,15 @@ export default function App() {
     try {
       await signOut(auth);
       setUser(null); // Menghapus sesi
-      // Muat ulang data dari mode lokal
+      
+      // Muat ulang Aktivitas dari mode lokal
       const savedData = localStorage.getItem('offline_activities');
       setParsedData(savedData ? JSON.parse(savedData) : []);
+      
+      // Muat ulang Catatan dari mode lokal
+      const savedNotes = localStorage.getItem('appNotes');
+      setAppNotes(savedNotes ? JSON.parse(savedNotes) : []);
+
       showToast('Logout berhasil. Kembali ke Mode Lokal.');
       setActiveTab('home');
     } catch(e) {
