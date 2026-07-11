@@ -1846,6 +1846,26 @@ export default function App() {
                   </code>
                 </div>
 
+                {/* Aturan 6 (BARU) */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">6. Potong Menit (Shift Waktu)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik titik dan angka menit sebelum nama aktivitas. Sistem akan memundurkan jam mulai sebanyak menit tersebut.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [10/7 20.15] : .23 Nyuci<br/>
+                    <span className="text-gray-500 italic">// Mulai ditarik mundur ke jam 19.52</span>
+                  </code>
+                </div>
+
+                {/* Aturan 7 (BARU) */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">7. Durasi Langsung Instan</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.d) dan angka di akhir nama. Jam pesan otomatis menjadi jam selesai, dengan durasi sesuai angka.</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [10/7 16.13] : Makan .d29<br/>
+                    <span className="text-gray-500 italic">// Durasi 29 menit, selesai tepat 16.13</span>
+                  </code>
+                </div>
+
               </div>
 
               <div className={`mt-5 pt-4 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
