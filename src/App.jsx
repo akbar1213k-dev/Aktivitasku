@@ -49,7 +49,7 @@ export default function App() {
   
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar (Waktu bersambung otomatis):\n[DD/MM HH.MM] : Nama Aktivitas\nContoh:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n(Sistem menghitung Sarapan pagi dari 08.00 hingga 08.30)\n\n2. Format Eksplisit (Waktu spesifik):\n[DD/MM HH.MM] : HH.MM Nama Aktivitas\nContoh:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Aktivitas Selesai:\nKetik titik tunggal (.)\nContoh:\n[12/10 11.00] : .\n\n4. Format Jeda/Istirahat (Sesi):\n(..) untuk JEDA, (...) untuk LANJUT\nContoh:\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur (Backward):\nKetik titik di awal nama (. Nama Aktivitas)\nContoh:\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Jam mulai menjadi 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi otomatis 29 menit, selesai jam 16.13)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -419,6 +419,16 @@ export default function App() {
       return;
     }
 
+    // --- HELPER UNTUK MENGURANGI MENIT WAKTU ---
+    const subtractMinutes = (timeStr, minsToSubtract) => {
+      let [h, m] = timeStr.replace('.', ':').split(':').map(Number);
+      let totalMins = (h || 0) * 60 + (m || 0) - parseInt(minsToSubtract, 10);
+      if (totalMins < 0) totalMins += 24 * 60; // Jika mundur melewati tengah malam
+      const newH = Math.floor(totalMins / 60) % 24;
+      const newM = totalMins % 60;
+      return `${newH.toString().padStart(2, '0')}.${newM.toString().padStart(2, '0')}`;
+    };
+
     const lines = inputText.split('\n');
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
@@ -433,6 +443,26 @@ export default function App() {
         let time = match[2];
         let message = match[4].trim();
 
+        // 1. MEKANISME BARU: SHIFT WAKTU (.23 Nyuci)
+        const shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
+        if (shiftMatch) {
+          const shiftMins = parseInt(shiftMatch[1], 10);
+          time = subtractMinutes(time, shiftMins); // Jam ditarik mundur
+          message = shiftMatch[2].trim();
+        }
+
+        // 2. MEKANISME BARU: DURASI LANGSUNG (Makan .d29)
+        let explicitStart = null;
+        let explicitEnd = null;
+        const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
+        if (durMatch) {
+          message = durMatch[1].trim();
+          const durMins = parseInt(durMatch[2], 10);
+          explicitEnd = time; // Jam pesan menjadi waktu selesai
+          explicitStart = subtractMinutes(time, durMins); // Mulainya mundur sebesar durasi
+        }
+
+        // Format Eksplisit Jam bawaan (Contoh: "10.30 Olahraga")
         const explicitTimeMatch = message.match(/^(\d{1,2}[.:]\d{2})\s+(.*)/);
         if (explicitTimeMatch) {
           time = explicitTimeMatch[1];
@@ -448,27 +478,42 @@ export default function App() {
           activityFromDot = message.substring(1).trim();
         }
 
-        if (isPauseMarker) {
-          // JEDA: Tutup segmen yang sedang berjalan, biarkan sesi tetap hidup
+        // --- EKSEKUSI ---
+        if (explicitStart && explicitEnd) {
+          // Jika menggunakan mekanisme .d[angka] (Langsung difinalisasi)
+          if (activeSession) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = explicitStart; // Tutup aktivitas sblmnya
+              newActivities.push(finalizeSession(activeSession));
+          }
+          let newSess = { id: crypto.randomUUID(), date, message: message, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
+          newActivities.push(finalizeSession(newSess));
+          activeSession = null;
+          lastTime = explicitEnd;
+        } 
+        else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
           }
-        } else if (isResumeMarker) {
-          // LANJUT: Buka segmen baru pada sesi yang sama
+          lastTime = time;
+        } 
+        else if (isResumeMarker) {
           if (activeSession) {
               activeSession.segments.push({ start: time, end: null });
           }
-        } else if (isEndMarker) {
-          // SELESAI: Tutup segmen terakhir dan finalisasi seluruh sesi
+          lastTime = time;
+        } 
+        else if (isEndMarker) {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
               newActivities.push(finalizeSession(activeSession));
               activeSession = null;
           }
-        } else if (activityFromDot) {
-          // BACKWARD (Mundur)
+          lastTime = time;
+        } 
+        else if (activityFromDot) {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
@@ -479,21 +524,24 @@ export default function App() {
               newActivities.push(finalizeSession(newSess));
           }
           activeSession = null;
-        } else {
-          // AKTIVITAS BARU
+          lastTime = time;
+        } 
+        else {
+          // AKTIVITAS BARU NORMAL
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
               newActivities.push(finalizeSession(activeSession));
           }
           activeSession = { id: crypto.randomUUID(), date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+          lastTime = time;
         }
-
-        lastTime = time;
       }
     });
 
+    // --- KODE LAMA LANJUT DARI SINI: CEK TUMPANG TINDIH ---
     if (newActivities.length > 0) {
+      
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
       const overlapCheck = checkTimeOverlap(newActivities, parsedData);
       if (overlapCheck.hasOverlap) {
