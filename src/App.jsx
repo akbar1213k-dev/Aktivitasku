@@ -499,6 +499,8 @@ export default function App() {
     return new Date(fullYear, month, day);
   };
 
+  // --- LOGIKA FILTER & PENGURUTAN GLOBAL ---
+  // Mengurutkan SELURUH data berdasarkan Jam dan Tanggal nyata (MENGABAIKAN WAKTU INPUT)
   const filteredData = parsedData.filter(item => {
     if (dateFilter === 'all') return true;
     const itemDate = parseDateStr(item.date);
@@ -514,20 +516,24 @@ export default function App() {
       return itemDate >= s && itemDate <= e;
     }
     return true;
-  });
-
-const sortedHomeData = [...filteredData].sort((a, b) => {
+  }).sort((a, b) => {
+    // Kalkulasi Jam & Tanggal untuk Aktivitas A
     const dateA = parseDateStr(a.date);
     const [hA, mA] = (a.startTime || '00.00').replace('.', ':').split(':').map(Number);
     dateA.setHours(hA || 0, mA || 0, 0, 0);
     
+    // Kalkulasi Jam & Tanggal untuk Aktivitas B
     const dateB = parseDateStr(b.date);
     const [hB, mB] = (b.startTime || '00.00').replace('.', ':').split(':').map(Number);
     dateB.setHours(hB || 0, mB || 0, 0, 0);
     
+    // Urutkan sesuai pilihan pengaturan (Terbaru/Terlama) secara akurat
     return sortOrder === 'terbaru' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
-  });                  
+  });
 
+  // Alias agar kode di tab Home tidak error
+  const sortedHomeData = filteredData; 
+  // -----------------------------------------
   const availableCategories = Array.from(new Set([
     'Produktif', 'Non Produktif', ...parsedData.map(d => d.category).filter(Boolean)
   ]));
