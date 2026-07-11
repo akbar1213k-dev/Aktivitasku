@@ -257,6 +257,55 @@ export default function App() {
     return { text, rawMinutes: diffMinutes };
   };
 
+  // --- FUNGSI PENGECEK TUMPANG TINDIH WAKTU (BENTROK) ---
+  const checkTimeOverlap = (activitiesToCheck, existingData) => {
+    const toMins = (timeStr) => {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const allActs = [...existingData]; // Gabungkan data lama dan baru
+    
+    for (const newAct of activitiesToCheck) {
+      const newDate = newAct.date;
+      const newSegs = newAct.segments && newAct.segments.length > 0 ? newAct.segments : [{start: newAct.startTime, end: newAct.endTime}];
+
+      for (const existingAct of allActs) {
+        if (existingAct.id === newAct.id) continue; // Jangan cek diri sendiri saat di-edit
+        
+        if (existingAct.date === newDate) {
+          const oldSegs = existingAct.segments && existingAct.segments.length > 0 ? existingAct.segments : [{start: existingAct.startTime, end: existingAct.endTime}];
+
+          for (const nSeg of newSegs) {
+            for (const oSeg of oldSegs) {
+              if (!nSeg.start || !nSeg.end || !oSeg.start || !oSeg.end) continue;
+              
+              let nStart = toMins(nSeg.start);
+              let nEnd = toMins(nSeg.end);
+              if (nEnd <= nStart) nEnd += 24 * 60; // Jika melewati tengah malam
+
+              let oStart = toMins(oSeg.start);
+              let oEnd = toMins(oSeg.end);
+              if (oEnd <= oStart) oEnd += 24 * 60;
+
+              // Kondisi Bentrok: MulaiA < SelesaiB DAN MulaiB < SelesaiA
+              if (nStart < oEnd && oStart < nEnd) {
+                return {
+                  hasOverlap: true,
+                  msg: `Terdapat tumpang tindih waktu (bentrok) pada tanggal ${newDate}!\n\n🛑 [${existingAct.activity}] (${oSeg.start} - ${oSeg.end})\n⚠️ [${newAct.activity}] (${nSeg.start} - ${nSeg.end})\n\nSilakan sesuaikan kembali jam aktivitas Anda sebelum menyimpan.`
+                };
+              }
+            }
+          }
+        }
+      }
+      allActs.push(newAct); // Tambahkan ke daftar agar aktivitas baru dicek satu sama lain
+    }
+    return { hasOverlap: false };
+  };
+  // --------------------------------------------------------
+
   // Fungsi untuk memfinalisasi satu sesi (termasuk yang memiliki jeda/segmen)
   const finalizeSession = (session) => {
     let totalMinutes = 0;
@@ -363,6 +412,14 @@ export default function App() {
     });
 
     if (newActivities.length > 0) {
+      // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
+      const overlapCheck = checkTimeOverlap(newActivities, parsedData);
+      if (overlapCheck.hasOverlap) {
+         alert(overlapCheck.msg); // Memunculkan pop up peringatan di layar
+         return; // Langsung membatalkan dan menghentikan proses simpan
+      }
+      // ------------------------------------------------------
+
       if (user && db) {
         try {
           const batch = writeBatch(db);
@@ -465,6 +522,14 @@ export default function App() {
         const durInfo = calculateDurationInfo(editingItem.startTime, editingItem.endTime);
         updatedItem = { ...updatedItem, durationText: durInfo.text, rawMinutes: durInfo.rawMinutes };
       }
+
+      // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN HASIL EDIT ---
+      const overlapCheck = checkTimeOverlap([updatedItem], parsedData);
+      if (overlapCheck.hasOverlap) {
+         alert(overlapCheck.msg);
+         return; // Membatalkan penyimpanan jika waktu edit bentrok
+      }
+      // -------------------------------------------------------
 
       if (user && db) {
          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', editingItem.id);
