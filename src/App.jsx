@@ -1173,7 +1173,7 @@ export default function App() {
             </div>
           )}
 
-          {/* --- TAB VISUALISASI MULTI-HARI (SCROLL BERSAMBUNG) --- */}
+          {/* --- TAB VISUALISASI MULTI-HARI (SCROLL BERSAMBUNG & BEBAS BUG) --- */}
           {activeTab === 'visual' && (
             <div className="space-y-4 animate-in fade-in duration-300 pb-10">
               <div className="flex justify-between items-center mb-6">
@@ -1198,8 +1198,7 @@ export default function App() {
               )}
 
               {/* KONTAINER UTAMA TIMELINE */}
-              {/* PENTING: Class 'overflow-hidden' DIHAPUS agar fitur Sticky (Mengapung) pada tanggal bisa bekerja! */}
-              <div className={`relative w-full rounded-3xl shadow-inner border ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+              <div className={`relative w-full rounded-3xl shadow-inner border flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 {(() => {
                   // 1. Kelompokkan aktivitas berdasarkan Tanggal
                   const groupedData = {};
@@ -1208,15 +1207,13 @@ export default function App() {
                     groupedData[act.date].push(act);
                   });
 
-                 // 2. Urutkan tanggal mengikuti pengaturan (Terbaru/Terlama)
+                  // 2. Urutkan tanggal mengikuti pengaturan (Terbaru/Terlama)
                   const sortedDates = Object.keys(groupedData).sort((a, b) => {
                     const timeA = parseDateStr(a).getTime();
                     const timeB = parseDateStr(b).getTime();
-                    // Jika diatur 'terbaru', tanggal paling baru di atas. Sebaliknya 'terlama' di atas.
                     return sortOrder === 'terbaru' ? timeB - timeA : timeA - timeB;
                   });
 
-                  // Tampilan jika kosong
                   if (sortedDates.length === 0) {
                      return (
                         <div className="flex flex-col items-center justify-center text-gray-400 py-24">
@@ -1226,7 +1223,7 @@ export default function App() {
                      );
                   }
 
-                  // 3. Fungsi Pembuat Warna Lembut (Otomatis beda per Nama Aktivitas)
+                  // 3. Fungsi Pembuat Warna Lembut
                   const getActivityColor = (text) => {
                     let hash = 0;
                     for (let i = 0; i < text.length; i++) hash = text.charCodeAt(i) + ((hash << 5) - hash);
@@ -1244,7 +1241,17 @@ export default function App() {
                     return isDarkMode ? themes[index].dark : themes[index].light;
                   };
 
-                  // 4. Render Blok Skala 24 Jam bersambung untuk tiap Tanggal
+                  // 4. Helper Hitung Posisi & Pencegah Tumpah (Bug Fix)
+                  const getSafePosition = (timeStr, rawMins) => {
+                    if (!timeStr) return null;
+                    const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
+                    const sMins = ((h || 0) % 24) * 60 + (m || 0); // Fix bug jam 24:00
+                    let bHeight = Math.max(rawMins || 0, 15); // Minimal tinggi 15px agar bisa diklik
+                    bHeight = Math.min(bHeight, 1440 - sMins); // KUNCI UTAMA: Potong tinggi jika menyeberang 24:00 agar tidak tumpah
+                    return { startMins: sMins, blockHeight: bHeight };
+                  };
+
+                  // 5. Render Blok Skala 24 Jam
                   return sortedDates.map((dateStr) => {
                     const actsForDate = groupedData[dateStr];
                     const isToday = parseDateStr(dateStr).getTime() === new Date().setHours(0,0,0,0);
@@ -1253,13 +1260,8 @@ export default function App() {
                       <div key={dateStr} className={`relative w-full h-[1440px] border-b border-dashed ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
                         
                         {/* --- Garis Batas 00:00 & Tanggal Mengapung (Sticky) --- */}
-                        {/* Menggunakan top-2 agar mengapung rapi sedikit di bawah atap layar HP */}
-                        <div className="sticky top-2 z-50 w-full pointer-events-none h-0 overflow-visible">
-                           
-                           {/* Garis Pembatas Tipis (Absolute agar tidak memakan tinggi ruang sama sekali) */}
+                        <div className="sticky top-2 z-40 w-full pointer-events-none h-0 overflow-visible">
                            <div className={`absolute top-0 left-0 w-full border-t-[3px] shadow-sm ${isDarkMode ? 'border-orange-500/60' : 'border-orange-500/80'}`}></div>
-                           
-                           {/* Teks Tanggal & Info Aktivitas (Transparan & Mengapung di bawah garis) */}
                            <div className="absolute top-0 left-0 w-full flex justify-between items-start px-3 mt-1.5">
                              <span className={`text-[10px] font-black tracking-widest flex items-center gap-1 backdrop-blur-md px-2 py-0.5 rounded-lg shadow-sm opacity-90 border ${isDarkMode ? 'text-orange-300 bg-gray-900/60 border-gray-700' : 'text-orange-700 bg-white/70 border-gray-200'}`}>
                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -1271,7 +1273,7 @@ export default function App() {
                            </div>
                         </div>
 
-                        {/* Garis Penanda Jam (00:00 - 23:00) -> Orientasi Dinamis */}
+                        {/* Garis Penanda Jam Orientasi Dinamis (Terbaru/Terlama) */}
                         {Array.from({ length: 24 }).map((_, i) => (
                           <div key={i} className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800/40' : 'border-gray-200/50'}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${i * 60}px`, bottom: sortOrder === 'terbaru' ? `${i * 60}px` : 'auto', height: '0px' }}>
                             <span className={`absolute text-[10px] font-black -mt-2 bg-transparent pl-4 pr-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
@@ -1280,43 +1282,38 @@ export default function App() {
                           </div>
                         ))}
 
-                        {/* Garis Merah Waktu Saat Ini (Target Scroll) */}
+                        {/* Garis Merah Waktu Saat Ini (Dapat Dilompati Tombol) */}
                         {isToday && (
                           <div ref={currentTimeRef} className="absolute w-full border-t-2 border-red-500 z-20 pointer-events-none flex items-center" style={{ top: sortOrder === 'terbaru' ? 'auto' : `${new Date().getHours() * 60 + new Date().getMinutes()}px`, bottom: sortOrder === 'terbaru' ? `${new Date().getHours() * 60 + new Date().getMinutes()}px` : 'auto', height: '0px' }}>
                              <div className="absolute w-2 h-2 rounded-full bg-red-500 ml-1 shadow-[0_0_8px_rgba(239,68,68,0.8)] -mt-1"></div>
                           </div>
                         )}
 
-                        {/* Render Kotak Aktivitas dengan Orientasi & Warna Halus */}
+                        {/* Render Kotak Aktivitas */}
                         {actsForDate.map(act => {
                           const colorClass = getActivityColor(act.activity);
+                          const textAlignment = sortOrder === 'terbaru' ? 'justify-end pb-2' : 'justify-start pt-2'; // Fix teks posisi terbalik
 
-                          // 1. Mapping Jika Memiliki Segmen / Jeda
                           if (act.segments && act.segments.length > 1) {
                             return act.segments.map((seg, idx) => {
-                              if (!seg.start || !seg.end) return null;
-                              const sParts = seg.start.replace('.', ':').split(':').map(Number);
-                              const startMins = sParts[0] * 60 + sParts[1];
-                              const blockHeight = Math.max(seg.rawMinutes, 15); 
+                              const pos = getSafePosition(seg.start, seg.rawMinutes);
+                              if (!pos) return null;
                               return (
-                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${startMins}px`, bottom: sortOrder === 'terbaru' ? `${startMins}px` : 'auto', height: `${blockHeight}px` }}>
-                                  <p className="font-bold truncate">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
-                                  {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
+                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
+                                  <p className="font-bold truncate leading-tight">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
+                                  {pos.blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
                                 </div>
                               );
                             });
                           }
 
-                          // 2. Mapping Jika Aktivitas Normal (Tanpa Jeda)
-                          if (!act.startTime || !act.endTime) return null;
-                          const sParts = act.startTime.replace('.', ':').split(':').map(Number);
-                          const startMins = sParts[0] * 60 + sParts[1];
-                          const blockHeight = Math.max(act.rawMinutes, 15);
+                          const pos = getSafePosition(act.startTime, act.rawMinutes);
+                          if (!pos) return null;
 
                           return (
-                            <div key={act.id} className={`absolute left-16 right-6 p-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col justify-start opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${startMins}px`, bottom: sortOrder === 'terbaru' ? `${startMins}px` : 'auto', height: `${blockHeight}px` }}>
-                              <p className="font-bold truncate">{act.activity}</p>
-                              {blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
+                            <div key={act.id} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
+                              <p className="font-bold truncate leading-tight">{act.activity}</p>
+                              {pos.blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
                             </div>
                           );
                         })}
