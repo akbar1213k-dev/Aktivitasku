@@ -1604,7 +1604,7 @@ export default function App() {
           
         {/* --- KODE MODAL EDIT AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {editingItem && (
-          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
               <h3 className={`text-xl font-extrabold mb-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Edit Aktivitas</h3>
               
@@ -1738,7 +1738,7 @@ export default function App() {
               
         {/* --- KODE MODAL KATEGORI (SUDAH SUPPORT DARK MODE) --- */}
         {categoryModalOpen && (
-          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
                <h3 className={`text-xl font-extrabold mb-2 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Tetapkan Kategori</h3>
                <p className={`text-xs mb-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Terapkan ke {selectedItems.length} aktivitas yang dipilih.</p>
@@ -1799,7 +1799,7 @@ export default function App() {
 
         {/* --- KODE MODAL TAMBAH AKTIVITAS (SUDAH SUPPORT DARK MODE) --- */}
         {isModalOpen && (
-          <div className="absolute inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-gray-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className={`w-full rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
               
               <div className="flex justify-between items-center mb-1">
@@ -1852,7 +1852,7 @@ export default function App() {
 
         {/* --- KODE MODAL PANDUAN FORMAT (BARU) --- */}
         {isGuideOpen && (
-          <div className="absolute inset-0 bg-gray-900/80 z-[80] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="fixed inset-0 bg-gray-900/80 z-[80] flex items-center justify-center p-4 backdrop-blur-md">
             <div className={`w-full max-h-[85vh] flex flex-col rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 border ${isDarkMode ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-100 text-gray-800'}`}>
               
               <div className="flex justify-between items-center mb-4">
