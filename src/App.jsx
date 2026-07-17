@@ -422,11 +422,20 @@ export default function App() {
       return;
     }
 
-    // --- HELPER UNTUK MENGURANGI MENIT WAKTU ---
+    // --- HELPER UNTUK MENGURANGI WAKTU ---
     const subtractMinutes = (timeStr, minsToSubtract) => {
       let [h, m] = timeStr.replace('.', ':').split(':').map(Number);
       let totalMins = (h || 0) * 60 + (m || 0) - parseInt(minsToSubtract, 10);
       if (totalMins < 0) totalMins += 24 * 60; // Jika mundur melewati tengah malam
+      const newH = Math.floor(totalMins / 60) % 24;
+      const newM = totalMins % 60;
+      return `${newH.toString().padStart(2, '0')}.${newM.toString().padStart(2, '0')}`;
+    };
+
+    // --- HELPER BARU: UNTUK MENAMBAH WAKTU ---
+    const addMinutes = (timeStr, minsToAdd) => {
+      let [h, m] = timeStr.replace('.', ':').split(':').map(Number);
+      let totalMins = (h || 0) * 60 + (m || 0) + parseInt(minsToAdd, 10);
       const newH = Math.floor(totalMins / 60) % 24;
       const newM = totalMins % 60;
       return `${newH.toString().padStart(2, '0')}.${newM.toString().padStart(2, '0')}`;
@@ -446,30 +455,44 @@ export default function App() {
         let time = match[2];
         let message = match[4].trim();
 
-        // 1. MEKANISME BARU: SHIFT WAKTU (.23 Nyuci)
-        const shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
-        if (shiftMatch) {
-          const shiftMins = parseInt(shiftMatch[1], 10);
-          time = subtractMinutes(time, shiftMins); // Jam ditarik mundur
-          message = shiftMatch[2].trim();
+        // 1. PRIORITAS UTAMA: Ekstrak Jam Eksplisit Terlebih Dahulu (contoh "17.00 . Makan .d23")
+        let hasExplicitTime = false;
+        const explicitTimeMatch = message.match(/^(\d{1,2}[.:]\d{2})\s+(.*)/);
+        if (explicitTimeMatch) {
+          time = explicitTimeMatch[1]; // Jam patokan berubah menjadi jam eksplisit (17.00)
+          message = explicitTimeMatch[2].trim(); // Pesan tersisa, misal ". Makan .d23"
+          hasExplicitTime = true;
         }
 
-        // 2. MEKANISME BARU: DURASI LANGSUNG (Makan .d29)
+        // 2. MEKANISME DURASI LANGSUNG (Makan .d29 atau . Shalat .d21)
         let explicitStart = null;
         let explicitEnd = null;
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
         if (durMatch) {
-          message = durMatch[1].trim();
+          message = durMatch[1].trim(); // Membuang ".d23" dari string pesan
           const durMins = parseInt(durMatch[2], 10);
-          explicitEnd = time; // Jam pesan menjadi waktu selesai
-          explicitStart = subtractMinutes(time, durMins); // Mulainya mundur sebesar durasi
+          
+          if (hasExplicitTime) {
+            // Kasus A: "17.00 . Makan .d23" -> Selesai di 17.00, mulai di 17.00 dikurangi 23 menit
+            explicitEnd = time;
+            explicitStart = subtractMinutes(time, durMins);
+          } else if (message.startsWith('.')) {
+            // Kasus B: ". Shalat .d21" -> Menyambung! Mulai dari waktu terakhir tercatat (lastTime), Selesai ditambah 21 menit
+            explicitStart = lastTime || time;
+            explicitEnd = addMinutes(explicitStart, durMins);
+          } else {
+            // Kasus Standar C: "Makan .d29" -> Selesai pada jam pesan, mulai dikurangi 29 menit
+            explicitEnd = time;
+            explicitStart = subtractMinutes(time, durMins);
+          }
         }
 
-        // Format Eksplisit Jam bawaan (Contoh: "10.30 Olahraga")
-        const explicitTimeMatch = message.match(/^(\d{1,2}[.:]\d{2})\s+(.*)/);
-        if (explicitTimeMatch) {
-          time = explicitTimeMatch[1];
-          message = explicitTimeMatch[2].trim();
+        // 3. MEKANISME SHIFT WAKTU MUNDUR (.23 Nyuci)
+        const shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
+        if (shiftMatch && !durMatch) { // Tidak dijalankan jika format .d sudah dipakai
+          const shiftMins = parseInt(shiftMatch[1], 10);
+          time = subtractMinutes(time, shiftMins); 
+          message = shiftMatch[2].trim();
         }
 
         const isEndMarker = message === '.';
@@ -483,17 +506,18 @@ export default function App() {
 
         // --- EKSEKUSI ---
         if (explicitStart && explicitEnd) {
-          // Jika menggunakan mekanisme .d[angka] (Langsung difinalisasi)
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-              if (!lastSeg.end) lastSeg.end = explicitStart; // Tutup aktivitas sblmnya
+              if (!lastSeg.end) lastSeg.end = explicitStart; 
               newActivities.push(finalizeSession(activeSession));
           }
-          let newSess = { id: crypto.randomUUID(), date, message: message, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
+          // Gunakan string yang bersih tanpa titik jika activityFromDot tersedia
+          let actName = activityFromDot || message; 
+          let newSess = { id: crypto.randomUUID(), date, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
           newActivities.push(finalizeSession(newSess));
           activeSession = null;
-          lastTime = explicitEnd;
-        } 
+          lastTime = explicitEnd; // lastTime otomatis tersimpan dengan waktu akhir agar aktivitas selanjutnya bisa menyambung
+        }
         else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
