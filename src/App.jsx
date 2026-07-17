@@ -509,14 +509,14 @@ export default function App() {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = explicitStart; 
+              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
           }
-          // Gunakan string yang bersih tanpa titik jika activityFromDot tersedia
           let actName = activityFromDot || message; 
-          let newSess = { id: crypto.randomUUID(), date, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
+          let newSess = { id: crypto.randomUUID(), date, endDate: date, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
           newActivities.push(finalizeSession(newSess));
           activeSession = null;
-          lastTime = explicitEnd; // lastTime otomatis tersimpan dengan waktu akhir agar aktivitas selanjutnya bisa menyambung
+          lastTime = explicitEnd; 
         }
         else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
@@ -535,6 +535,7 @@ export default function App() {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
+              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
               activeSession = null;
           }
@@ -544,10 +545,11 @@ export default function App() {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
+              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
           }
           if (lastTime) {
-              let newSess = { id: crypto.randomUUID(), date, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
+              let newSess = { id: crypto.randomUUID(), date, endDate: date, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
               newActivities.push(finalizeSession(newSess));
           }
           activeSession = null;
@@ -558,13 +560,22 @@ export default function App() {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
+              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
           }
-          activeSession = { id: crypto.randomUUID(), date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+          activeSession = { id: crypto.randomUUID(), date, endDate: date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
           lastTime = time;
         }
       }
     });
+
+    // Jika di akhir log masih ada sesi menggantung, tutup otomatis
+    if (activeSession) {
+       activeSession.endDate = activeSession.date;
+       let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+       if (!lastSeg.end) lastSeg.end = lastSeg.start; 
+       newActivities.push(finalizeSession(activeSession));
+    }
 
     // --- KODE LAMA LANJUT DARI SINI: CEK TUMPANG TINDIH ---
     if (newActivities.length > 0) {
@@ -1074,7 +1085,11 @@ export default function App() {
                             )}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <p className="text-xs font-medium text-gray-400">{item.date} • {item.startTime} - {item.endTime}</p>
+                            <p className="text-xs font-medium text-gray-400">
+                              {item.endDate && item.endDate !== item.date 
+                                ? `${item.date} (${item.startTime}) - ${item.endDate} (${item.endTime})` 
+                                : `${item.date} • ${item.startTime} - ${item.endTime}`}
+                            </p>
                             {item.category && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-600'}`}>{item.category}</span>}
                           </div>
                         </div>
@@ -1486,6 +1501,12 @@ export default function App() {
                   filteredData.forEach(act => {
                     if (!groupedData[act.date]) groupedData[act.date] = [];
                     groupedData[act.date].push(act);
+                    
+                    // BARU: Gandakan data ke hari esoknya agar bisa digambar sisa jam tidurnya
+                    if (act.endDate && act.endDate !== act.date) {
+                      if (!groupedData[act.endDate]) groupedData[act.endDate] = [];
+                      groupedData[act.endDate].push({ ...act, isContinuation: true });
+                    }
                   });
 
                   // 2. Urutkan tanggal mengikuti pengaturan (Terbaru/Terlama)
@@ -1522,29 +1543,27 @@ export default function App() {
                     return isDarkMode ? themes[index].dark : themes[index].light;
                   };
 
-                  // 4. Helper Hitung Posisi & Pencegah Tumpah (Penyempurnaan Cross-Midnight)
-                  const getSafePosition = (timeStr, endTimeStr, rawMins) => {
-                    if (!timeStr) return null;
+                  // 4. Helper Hitung Posisi & Pencegah Tumpah (Mendukung Lintas Hari)
+                  const getSafePosition = (timeStr, endTimeStr, rawMins, isContinuation) => {
+                    if (!timeStr || !endTimeStr) return null;
                     const [startH, startM] = timeStr.replace('.', ':').split(':').map(Number);
-                    const startMins = ((startH || 0) % 24) * 60 + (startM || 0);
+                    const [endH, endM] = endTimeStr.replace('.', ':').split(':').map(Number);
                     
-                    let endMins;
-                    // Jika ada jam selesai eksplisit, kita hitung agar presisi saat diedit
-                    if (endTimeStr) {
-                       const [endH, endM] = endTimeStr.replace('.', ':').split(':').map(Number);
-                       endMins = ((endH || 0) % 24) * 60 + (endM || 0);
-                       // Jika jam selesai lebih kecil dari jam mulai (misal tidur 22.00 bangun 05.00)
-                       if (endMins <= startMins) {
-                          endMins = 1440; // Paksa mentok di ujung malam (24.00) untuk hari ini
-                       }
+                    let startMins = ((startH || 0) % 24) * 60 + (startM || 0);
+                    let endMins = ((endH || 0) % 24) * 60 + (endM || 0);
+                    
+                    const isCrossMidnight = endMins <= startMins;
+
+                    if (isContinuation) {
+                       if (!isCrossMidnight) return null; 
+                       startMins = 0; // Mulai di atap kanvas (00:00) pada hari ke-2
                     } else {
-                       // Fallback ke rawMinutes jika endTimeStr tidak valid
-                       endMins = startMins + (rawMins || 15);
+                       if (isCrossMidnight) {
+                          endMins = 1440; // Mentok di batas dasar kanvas (24:00) pada hari ke-1
+                       }
                     }
 
-                    let bHeight = Math.max(endMins - startMins, 15); // Minimal 15px
-                    
-                    // Pastikan tidak tembus batas bawah hari ini
+                    let bHeight = Math.max(endMins - startMins, 15); 
                     bHeight = Math.min(bHeight, 1440 - startMins); 
 
                     return { startMins: startMins, blockHeight: bHeight };
@@ -1595,8 +1614,9 @@ export default function App() {
 
                           if (act.segments && act.segments.length > 1) {
                             return act.segments.map((seg, idx) => {
-                              // PERUBAHAN: Memasukkan seg.end ke dalam fungsi getSafePosition
-                              const pos = getSafePosition(seg.start, seg.end, seg.rawMinutes);
+                              // PERUBAHAN: Mengirim flag isContinuation ke fungsi getSafePosition
+                              const pos = getSafePosition(seg.start, seg.end, seg.rawMinutes, act.isContinuation);
+// ... [SKIP PADA BARIS KEDUA] ...
                               if (!pos) return null;
                               return (
                                 <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
@@ -1607,8 +1627,8 @@ export default function App() {
                             });
                           }
 
-                          // PERUBAHAN: Memasukkan act.endTime ke dalam fungsi getSafePosition
-                          const pos = getSafePosition(act.startTime, act.endTime, act.rawMinutes);
+                          // PERUBAHAN: Mengirim flag isContinuation ke fungsi getSafePosition
+                          const pos = getSafePosition(act.startTime, act.endTime, act.rawMinutes, act.isContinuation);
                           if (!pos) return null;
 
                           return (
