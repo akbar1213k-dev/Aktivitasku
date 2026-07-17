@@ -1498,14 +1498,32 @@ export default function App() {
                     return isDarkMode ? themes[index].dark : themes[index].light;
                   };
 
-                  // 4. Helper Hitung Posisi & Pencegah Tumpah (Bug Fix)
-                  const getSafePosition = (timeStr, rawMins) => {
+                  // 4. Helper Hitung Posisi & Pencegah Tumpah (Penyempurnaan Cross-Midnight)
+                  const getSafePosition = (timeStr, endTimeStr, rawMins) => {
                     if (!timeStr) return null;
-                    const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
-                    const sMins = ((h || 0) % 24) * 60 + (m || 0); // Fix bug jam 24:00
-                    let bHeight = Math.max(rawMins || 0, 15); // Minimal tinggi 15px agar bisa diklik
-                    bHeight = Math.min(bHeight, 1440 - sMins); // KUNCI UTAMA: Potong tinggi jika menyeberang 24:00 agar tidak tumpah
-                    return { startMins: sMins, blockHeight: bHeight };
+                    const [startH, startM] = timeStr.replace('.', ':').split(':').map(Number);
+                    const startMins = ((startH || 0) % 24) * 60 + (startM || 0);
+                    
+                    let endMins;
+                    // Jika ada jam selesai eksplisit, kita hitung agar presisi saat diedit
+                    if (endTimeStr) {
+                       const [endH, endM] = endTimeStr.replace('.', ':').split(':').map(Number);
+                       endMins = ((endH || 0) % 24) * 60 + (endM || 0);
+                       // Jika jam selesai lebih kecil dari jam mulai (misal tidur 22.00 bangun 05.00)
+                       if (endMins <= startMins) {
+                          endMins = 1440; // Paksa mentok di ujung malam (24.00) untuk hari ini
+                       }
+                    } else {
+                       // Fallback ke rawMinutes jika endTimeStr tidak valid
+                       endMins = startMins + (rawMins || 15);
+                    }
+
+                    let bHeight = Math.max(endMins - startMins, 15); // Minimal 15px
+                    
+                    // Pastikan tidak tembus batas bawah hari ini
+                    bHeight = Math.min(bHeight, 1440 - startMins); 
+
+                    return { startMins: startMins, blockHeight: bHeight };
                   };
 
                   // 5. Render Blok Skala 24 Jam
@@ -1553,7 +1571,8 @@ export default function App() {
 
                           if (act.segments && act.segments.length > 1) {
                             return act.segments.map((seg, idx) => {
-                              const pos = getSafePosition(seg.start, seg.rawMinutes);
+                              // PERUBAHAN: Memasukkan seg.end ke dalam fungsi getSafePosition
+                              const pos = getSafePosition(seg.start, seg.end, seg.rawMinutes);
                               if (!pos) return null;
                               return (
                                 <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
@@ -1564,7 +1583,8 @@ export default function App() {
                             });
                           }
 
-                          const pos = getSafePosition(act.startTime, act.rawMinutes);
+                          // PERUBAHAN: Memasukkan act.endTime ke dalam fungsi getSafePosition
+                          const pos = getSafePosition(act.startTime, act.endTime, act.rawMinutes);
                           if (!pos) return null;
 
                           return (
