@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
+import UbahKategori from './UbahKategori'; // <-- BARU DITAMBAHKAN
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
   GoogleAuthProvider, signInWithPopup, signOut,
@@ -151,6 +152,8 @@ export default function App() {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
   const [expandedId, setExpandedId] = useState(null); // Menyimpan ID aktivitas yang sedang diklik untuk melihat detail
+  // STATE BARU UNTUK FITUR UBAH KATEGORI CEPAT
+  const [isUbahKategoriOpen, setIsUbahKategoriOpen] = useState(false);
   // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
   useEffect(() => {
     localStorage.setItem('offline_activities', JSON.stringify(parsedData));
@@ -787,6 +790,23 @@ export default function App() {
     setBulkCategory('');
   };
 
+  // FUNGSI BARU UNTUK MENYIMPAN 1 KATEGORI (Dipakai oleh UbahKategori.jsx)
+  const handleUbahKategoriTunggal = async (aktivitasId, namaKategori) => {
+    if (user && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', aktivitasId);
+        await updateDoc(docRef, { category: namaKategori });
+      } catch (e) {
+        showToast('Gagal update ke cloud.');
+      }
+    } else {
+      setParsedData(prev => 
+        prev.map(item => item.id === aktivitasId ? { ...item, category: namaKategori } : item)
+      );
+    }
+    showToast('Kategori disimpan!');
+  };
+
   const handleBulkMerge = async () => {
     if (selectedItems.length < 2) {
       showToast('Pilih minimal 2 aktivitas untuk digabungkan!');
@@ -1192,6 +1212,55 @@ export default function App() {
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Pengaturan</h2>
+
+              {/* --- FITUR UBAH KATEGORI CEPAT (BARU) --- */}
+              <div className={`p-5 rounded-3xl shadow-sm border mb-6 flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700 text-orange-400' : 'bg-orange-50 text-orange-500'}`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Rapikan Kategori</h3>
+                    <p className="text-xs text-gray-400 font-medium">Kategorikan aktivitas kosong</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsUbahKategoriOpen(true)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-bold transition-colors text-sm"
+                >
+                  Buka
+                </button>
+              </div>
+
+              {/* TAMPILAN MODAL UBAH KATEGORI (Akan muncul jika tombol 'Buka' di atas diklik) */}
+              {isUbahKategoriOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 z-[90] flex items-center justify-center p-4 backdrop-blur-sm">
+                  <div className={`w-full max-w-md rounded-[32px] p-6 shadow-2xl relative ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'}`}>
+                    
+                    {/* Tombol Silang (Tutup) */}
+                    <button 
+                      onClick={() => setIsUbahKategoriOpen(false)}
+                      className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+
+                    {/* Memanggil Komponen File UbahKategori.jsx */}
+                    <UbahKategori 
+                      daftarAktivitas={parsedData} 
+                      
+                      // Membentuk ulang daftarKategori agar berbentuk Object {id, nama} untuk UbahKategori.jsx
+                      daftarKategori={availableCategories
+                        .filter(cat => cat !== 'Belum Kategori') // Jangan masukkan 'Belum Kategori' sebagai pilihan
+                        .map(cat => ({ id: cat, nama: cat }))
+                      } 
+                      
+                      fungsiUbahKategori={handleUbahKategoriTunggal} 
+                    />
+
+                  </div>
+                </div>
+              )}
 
               {/* --- PENGATURAN URUTAN --- */}
               <div className={`p-5 rounded-3xl shadow-sm border mb-6 flex justify-between items-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
