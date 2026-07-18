@@ -154,6 +154,9 @@ export default function App() {
   const [expandedId, setExpandedId] = useState(null); // Menyimpan ID aktivitas yang sedang diklik untuk melihat detail
   // STATE BARU UNTUK FITUR UBAH KATEGORI CEPAT
   const [isUbahKategoriOpen, setIsUbahKategoriOpen] = useState(false);
+  // STATE BARU UNTUK MEMUNCULKAN DETAIL KATEGORI DI STATISTIK
+  const [selectedCategoryStats, setSelectedCategoryStats] = useState(null);
+  
   // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
   useEffect(() => {
     localStorage.setItem('offline_activities', JSON.stringify(parsedData));
@@ -1231,7 +1234,11 @@ export default function App() {
                     const pct = totalMinutesAll > 0 ? Math.round((mins / totalMinutesAll) * 100) : 0;
                     
                     return (
-                      <div key={cat} className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                      <div 
+                        key={cat} 
+                        onClick={() => setSelectedCategoryStats(cat)}
+                        className={`p-4 rounded-2xl shadow-sm border cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all active:scale-95 ${isDarkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-white border-gray-100 hover:border-orange-200'}`}
+                      >
                         <div className="flex justify-between items-center mb-2">
                           <span className="font-bold text-sm">{cat}</span>
                           <span className="text-orange-500 font-black text-sm">{timeTxt}</span>
@@ -1239,12 +1246,49 @@ export default function App() {
                         <div className={`w-full rounded-full h-2.5 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                           <div className="bg-orange-500 h-2.5 rounded-full" style={{width: `${pct}%`}}></div>
                         </div>
-                        <p className="text-right text-[10px] mt-1 text-gray-400">{pct}% dari total waktu</p>
+                        <p className="text-right text-[10px] mt-1 text-gray-400">{pct}% dari total waktu (Klik untuk melihat detail)</p>
                       </div>
                     );
                 })}
               </div>
               
+              {/* --- MODAL DAFTAR AKTIVITAS PER KATEGORI (MUNCUL JIKA KARTU DIKLIK) --- */}
+              {selectedCategoryStats && (
+                <div className="fixed inset-0 bg-gray-900/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+                  <div className={`w-full max-w-md max-h-[80vh] flex flex-col rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+                    <div className="flex justify-between items-center mb-4 border-b pb-4 border-dashed border-gray-300 dark:border-gray-700">
+                      <div>
+                        <h3 className={`text-xl font-extrabold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Aktivitas: {selectedCategoryStats}</h3>
+                        <p className="text-xs text-orange-500 font-bold mt-1">Berdasarkan filter waktu saat ini</p>
+                      </div>
+                      <button onClick={() => setSelectedCategoryStats(null)} className="p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-full transition-colors active:scale-90">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                      {filteredData
+                        .filter(item => (item.category || 'Belum Kategori') === selectedCategoryStats)
+                        .map(item => (
+                          <div key={item.id} className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                            <p className={`font-bold text-sm mb-1 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>{item.activity}</p>
+                            <p className="text-[11px] text-gray-400 font-medium">
+                              {item.endDate && item.endDate !== item.date 
+                                ? `${item.date} (${item.startTime}) - ${item.endDate} (${item.endTime})` 
+                                : `${item.date} • ${item.startTime} - ${item.endTime}`}
+                            </p>
+                            <div className="mt-2 inline-block px-2 py-1 rounded bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[10px] font-black tracking-wider">
+                              {item.durationText}
+                            </div>
+                          </div>
+                      ))}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+              {/* --- BATAS MODAL KATEGORI --- */}
+
           </div>
       )}
 
