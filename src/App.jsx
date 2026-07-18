@@ -1660,10 +1660,14 @@ export default function App() {
                             return act.segments.map((seg, idx) => {
                               // PERUBAHAN: Mengirim flag isContinuation ke fungsi getSafePosition
                               const pos = getSafePosition(seg.start, seg.end, seg.rawMinutes, act.isContinuation);
-// ... [SKIP PADA BARIS KEDUA] ...
                               if (!pos) return null;
                               return (
-                                <div key={`${act.id}-${idx}`} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
+                                <div 
+                                  key={`${act.id}-${idx}`} 
+                                  onDoubleClick={() => setEditingItem(act)}
+                                  className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} 
+                                  style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}
+                                >
                                   <p className="font-bold truncate leading-tight">{act.activity} <span className="opacity-70 text-[10px]">(Sesi {idx+1})</span></p>
                                   {pos.blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{seg.start} - {seg.end}</p>}
                                 </div>
@@ -1676,7 +1680,12 @@ export default function App() {
                           if (!pos) return null;
 
                           return (
-                            <div key={act.id} className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}>
+                            <div 
+                              key={act.id} 
+                              onDoubleClick={() => setEditingItem(act)}
+                              className={`absolute left-16 right-6 px-2 rounded-xl text-xs font-medium border shadow-sm overflow-hidden transition-all hover:scale-[1.01] hover:z-30 hover:shadow-md cursor-pointer flex flex-col ${textAlignment} opacity-95 hover:opacity-100 ${colorClass}`} 
+                              style={{ top: sortOrder === 'terbaru' ? 'auto' : `${pos.startMins}px`, bottom: sortOrder === 'terbaru' ? `${pos.startMins}px` : 'auto', height: `${pos.blockHeight}px` }}
+                            >
                               <p className="font-bold truncate leading-tight">{act.activity}</p>
                               {pos.blockHeight > 25 && <p className="opacity-80 text-[10px] mt-0.5">{act.startTime} - {act.endTime}</p>}
                             </div>
