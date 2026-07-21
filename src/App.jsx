@@ -632,6 +632,76 @@ export default function App() {
     showToast('Berhasil diekspor!');
   };
 
+  // --- FUNGSI BARU: EXPORT DATA KE CSV ---
+  const handleExportCSV = () => {
+    if (parsedData.length === 0) {
+      showToast('Tidak ada data untuk diekspor.');
+      return;
+    }
+
+    // Baris pertama (Header / Judul Kolom)
+    let csvContent = "Nama Aktivitas;Tanggal Mulai;Waktu Mulai;Tanggal Akhir;Waktu Akhir;Kategori\n";
+
+    // Helper: Tambahkan tahun jika belum ada (misal "12/05" otomatis jadi "12/05/2026")
+    const formatFullDate = (dateStr) => {
+      if (!dateStr) return '';
+      const parts = dateStr.split('/');
+      if (parts.length === 2) {
+        return `${dateStr}/${new Date().getFullYear()}`;
+      }
+      return dateStr;
+    };
+
+    // Helper: Hitung tanggal akhir (Menambah +1 hari jika waktu lewat tengah malam)
+    const getEndDate = (startStr, endStr, baseDateStr) => {
+      if (!startStr || !endStr) return baseDateStr;
+      const [sh, sm] = startStr.replace('.', ':').split(':').map(Number);
+      const [eh, em] = endStr.replace('.', ':').split(':').map(Number);
+      
+      const startMins = (sh * 60) + (sm || 0);
+      const endMins = (eh * 60) + (em || 0);
+
+      if (endMins < startMins) {
+        const parts = baseDateStr.split('/');
+        // Format di JS: Date(year, monthIndex, day)
+        const d = new Date(parts[2], parts[1] - 1, parts[0]);
+        d.setDate(d.getDate() + 1); // Tambah 1 hari
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+      }
+      return baseDateStr;
+    };
+
+    // Eksekusi penulisan setiap baris
+    parsedData.forEach(act => {
+      // Ubah semua huruf menjadi kapital sesuai contoh yang Anda minta
+      const nama = act.activity ? act.activity.toUpperCase() : '';
+      const kategori = act.category ? act.category.toUpperCase() : 'BELUM KATEGORI';
+      const tglMulai = formatFullDate(act.date);
+
+      // Jika aktivitas memiliki banyak SESI (dipecah menjadi banyak baris)
+      if (act.segments && act.segments.length > 0) {
+        act.segments.forEach(seg => {
+          const tglAkhir = getEndDate(seg.start, seg.end, tglMulai);
+          csvContent += `${nama};${tglMulai};${seg.start || ''};${tglAkhir};${seg.end || ''};${kategori}\n`;
+        });
+      } else {
+        // Jika aktivitas hanya punya 1 sesi standar
+        const tglAkhir = getEndDate(act.startTime, act.endTime, tglMulai);
+        csvContent += `${nama};${tglMulai};${act.startTime || ''};${tglAkhir};${act.endTime || ''};${kategori}\n`;
+      }
+    });
+
+    // Mengunduh file CSV
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'riwayat_aktivitas.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Berhasil diekspor ke CSV!');
+  };
+
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1956,6 +2026,11 @@ export default function App() {
                   onClick={handleExport} 
                   className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-50 hover:bg-gray-100 text-gray-500'}`}>
                   Export JSON
+                </button>
+                <button 
+                  onClick={handleExportCSV} 
+                  className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${isDarkMode ? 'bg-orange-900/30 hover:bg-orange-900/50 text-orange-400 border border-orange-800/30' : 'bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-100'}`}>
+                  Export CSV
                 </button>
                 <label className={`flex-1 text-xs font-bold py-2 rounded-xl text-center cursor-pointer transition-colors ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-50 hover:bg-gray-100 text-gray-500'}`}>
                   Import JSON
