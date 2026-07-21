@@ -1371,7 +1371,7 @@ export default function App() {
               )}
 
               {/* --- TOMBOL SCROLL TO TOP MENGAMBANG --- */}
-              {sortedHomeData.length > 5 && ( // Hanya muncul jika aktivitas cukup banyak untuk di-scroll
+              {sortedHomeData.length > 25 && ( // Hanya muncul jika aktivitas cukup banyak untuk di-scroll
                 <button
                   onClick={handleScrollToTopClick}
                   className={`fixed bottom-[100px] right-6 p-3 rounded-full shadow-lg backdrop-blur-sm z-40 transition-all duration-300 ${
