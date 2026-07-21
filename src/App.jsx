@@ -1370,7 +1370,7 @@ export default function App() {
                 })
               )}
 
-              {/* --- TOMBOL SCROLL TO TOP MENGAMBANG --- */}
+              {/* --- TOMBOL SCROLL TO TOP MENGAMBANG DI AKTIVITAS SAYA --- */}
               {sortedHomeData.length > 25 && ( // Hanya muncul jika aktivitas cukup banyak untuk di-scroll
                 <button
                   onClick={handleScrollToTopClick}
