@@ -639,8 +639,8 @@ export default function App() {
       return;
     }
 
-    // Baris pertama (Header / Judul Kolom)
-    let csvContent = "Nama Aktivitas;Tanggal Mulai;Waktu Mulai;Tanggal Akhir;Waktu Akhir;Kategori\n";
+    // Baris pertama (Header / Judul Kolom ditambah Durasi)
+    let csvContent = "Nama Aktivitas;Tanggal Mulai;Waktu Mulai;Tanggal Akhir;Waktu Akhir;Durasi (Menit);Kategori\n";
 
     // Helper: Tambahkan tahun jika belum ada (misal "12/05" otomatis jadi "12/05/2026")
     const formatFullDate = (dateStr) => {
@@ -650,6 +650,12 @@ export default function App() {
         return `${dateStr}/${new Date().getFullYear()}`;
       }
       return dateStr;
+    };
+
+    // Helper: Ubah pemisah jam dari Titik (.) menjadi Titik Dua (:)
+    const formatWaktu = (waktuStr) => {
+      if (!waktuStr) return '';
+      return waktuStr.replace('.', ':');
     };
 
     // Helper: Hitung tanggal akhir (Menambah +1 hari jika waktu lewat tengah malam)
@@ -682,12 +688,21 @@ export default function App() {
       if (act.segments && act.segments.length > 0) {
         act.segments.forEach(seg => {
           const tglAkhir = getEndDate(seg.start, seg.end, tglMulai);
-          csvContent += `${nama};${tglMulai};${seg.start || ''};${tglAkhir};${seg.end || ''};${kategori}\n`;
+          const waktuMulai = formatWaktu(seg.start);
+          const waktuAkhir = formatWaktu(seg.end);
+          // Menghitung durasi murni dalam angka (Menit) menggunakan fungsi bawaan aplikasi
+          const durasi = (seg.start && seg.end) ? calculateDurationInfo(seg.start, seg.end).rawMinutes : 0;
+          
+          csvContent += `${nama};${tglMulai};${waktuMulai};${tglAkhir};${waktuAkhir};${durasi};${kategori}\n`;
         });
       } else {
         // Jika aktivitas hanya punya 1 sesi standar
         const tglAkhir = getEndDate(act.startTime, act.endTime, tglMulai);
-        csvContent += `${nama};${tglMulai};${act.startTime || ''};${tglAkhir};${act.endTime || ''};${kategori}\n`;
+        const waktuMulai = formatWaktu(act.startTime);
+        const waktuAkhir = formatWaktu(act.endTime);
+        const durasi = (act.startTime && act.endTime) ? calculateDurationInfo(act.startTime, act.endTime).rawMinutes : 0;
+        
+        csvContent += `${nama};${tglMulai};${waktuMulai};${tglAkhir};${waktuAkhir};${durasi};${kategori}\n`;
       }
     });
 
