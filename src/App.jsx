@@ -142,6 +142,12 @@ export default function App() {
   const fileInputRef = useRef(null);
   const pressTimer = useRef(null);
   const currentTimeRef = useRef(null); // Ref untuk menggulir ke garis merah
+  
+  // --- FITUR SCROLL TO TOP ---
+  const topContainerRef = useRef(null); // Ref untuk target paling atas halaman
+  const [isScrollButtonActive, setIsScrollButtonActive] = useState(false); // Melacak status transparansi
+  const scrollTimerRef = useRef(null); // Timer untuk 3 detik
+  // ---------------------------
 
   // Filter, Seleksi, Kategori, & Expand
   const [dateFilter, setDateFilter] = useState('all');
@@ -321,6 +327,28 @@ export default function App() {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
   };
+
+  // --- LOGIKA TOMBOL SCROLL TO TOP ---
+  const handleScrollToTopClick = () => {
+    if (!isScrollButtonActive) {
+      // KLIK PERTAMA: Aktifkan mode terang (100% opacity)
+      setIsScrollButtonActive(true);
+      
+      // Bersihkan timer lama jika ada, lalu mulai timer baru 3 detik
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        setIsScrollButtonActive(false); // Kembali pudar setelah 3 detik
+      }, 3000);
+    } else {
+      // KLIK KEDUA (Saat terang): Scroll ke atas!
+      if (topContainerRef.current) {
+        topContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      setIsScrollButtonActive(false); // Langsung pudarkan lagi setelah scroll
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    }
+  };
+  // -----------------------------------
 
   const calculateDurationInfo = (startTime, endTime) => {
     const start = startTime.replace(/\./g, ':');
@@ -1221,6 +1249,9 @@ export default function App() {
 
         <div className="flex-1 pb-28 p-6">
           
+          {/* Jangkar tak terlihat untuk Scroll-to-Top */}
+          <div ref={topContainerRef} className="absolute top-0 w-full h-1 pointer-events-none"></div>
+
           {activeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in duration-300">
               <div className="flex justify-between items-center mb-6">
@@ -1338,6 +1369,23 @@ export default function App() {
                   );
                 })
               )}
+
+              {/* --- TOMBOL SCROLL TO TOP MENGAMBANG --- */}
+              {sortedHomeData.length > 5 && ( // Hanya muncul jika aktivitas cukup banyak untuk di-scroll
+                <button
+                  onClick={handleScrollToTopClick}
+                  className={`fixed bottom-[100px] right-6 p-3 rounded-full shadow-lg backdrop-blur-sm z-40 transition-all duration-300 ${
+                    isScrollButtonActive 
+                      ? 'opacity-100 scale-110 bg-orange-500 text-white shadow-orange-500/50' // Mode Terang 100%
+                      : 'opacity-20 scale-100 bg-gray-500 text-white hover:opacity-40' // Mode Pudar (Sekitar 10%-20% opacity)
+                  }`}
+                  aria-label="Kembali ke Atas"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 15l7-7 7 7"></path></svg>
+                </button>
+              )}
+              {/* --------------------------------------- */}
+
             </div>
           )}
 
