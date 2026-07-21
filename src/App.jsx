@@ -580,33 +580,144 @@ export default function App() {
        newActivities.push(finalizeSession(activeSession));
     }
 
-    // --- KODE LAMA LANJUT DARI SINI: CEK TUMPANG TINDIH ---
-    if (newActivities.length > 0) {
+    // --- FITUR BARU: AUTO-MERGE AKTIVITAS BERNAMA SAMA ---
+    const finalNewActivities = [];
+    const activitiesToUpdate = [];
+
+    // 1. Kumpulkan semua aktivitas baru berdasarkan Tanggal + Nama yang sama
+    const groupedActs = {};
+    newActivities.forEach(act => {
+      // Menggunakan toUpperCase() agar 'Masak' dan 'masak' tetap dianggap sama persis
+      const key = `${act.date}__${act.activity.trim().toUpperCase()}`;
+      if (!groupedActs[key]) groupedActs[key] = [];
+      groupedActs[key].push(act);
+    });
+
+    Object.keys(groupedActs).forEach(key => {
+      let actsToMerge = groupedActs[key];
       
-      // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
-      const overlapCheck = checkTimeOverlap(newActivities, parsedData);
-      if (overlapCheck.hasOverlap) {
-         alert(overlapCheck.msg); // Memunculkan pop up peringatan di layar
-         return; // Langsung membatalkan dan menghentikan proses simpan
+      // 2. Cari apakah ada data lama di memori (hari ini) dengan nama yang sama persis
+      const existingMatch = parsedData.find(oldAct => 
+         `${oldAct.date}__${(oldAct.activity || '').trim().toUpperCase()}` === key
+      );
+
+      if (existingMatch) {
+         actsToMerge = [existingMatch, ...actsToMerge];
       }
-      // ------------------------------------------------------
+
+      // Jika tidak ada yang perlu digabung (hanya 1 aktivitas tunggal)
+      if (actsToMerge.length === 1) {
+         finalNewActivities.push(actsToMerge[0]);
+         return; // Pindah ke grup selanjutnya
+      }
+
+      // 3. Jika ditemukan lebih dari 1 (Lakukan Penggabungan Sesi)
+      // Urutkan berdasarkan waktu paling awal agar Sesi 1, Sesi 2 urut secara logis
+      actsToMerge.sort((a, b) => {
+         const dateA = parseDateStr(a.date);
+         const [hA, mA] = (a.startTime || '00.00').replace('.', ':').split(':').map(Number);
+         dateA.setHours(hA || 0, mA || 0, 0, 0);
+
+         const dateB = parseDateStr(b.date);
+         const [hB, mB] = (b.startTime || '00.00').replace('.', ':').split(':').map(Number);
+         dateB.setHours(hB || 0, mB || 0, 0, 0);
+
+         return dateA.getTime() - dateB.getTime();
+      });
+
+      const baseActivity = actsToMerge[0]; // Jadikan data paling awal sebagai pondasi
+      
+      let combinedSegments = [];
+      actsToMerge.forEach(act => {
+         if (act.segments && act.segments.length > 0) {
+            combinedSegments.push(...act.segments);
+         } else {
+            combinedSegments.push({
+               start: act.startTime,
+               end: act.endTime,
+               rawMinutes: act.rawMinutes
+            });
+         }
+      });
+
+      // Kalkulasi ulang total durasi dari gabungan semua sesi
+      let totalMinutes = 0;
+      combinedSegments.forEach(seg => {
+          if (seg.start && seg.end) {
+              const info = calculateDurationInfo(seg.start, seg.end);
+              seg.rawMinutes = info.rawMinutes;
+              totalMinutes += info.rawMinutes;
+          }
+      });
+
+      const updatedBaseActivity = {
+         ...baseActivity,
+         segments: combinedSegments,
+         startTime: combinedSegments[0].start, 
+         endTime: combinedSegments[combinedSegments.length - 1].end, 
+         rawMinutes: totalMinutes,
+      };
+
+      // Format ulang teks jam totalnya
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours > 0 && minutes > 0) updatedBaseActivity.durationText = `${hours}j ${minutes}m`;
+      else if (hours > 0) updatedBaseActivity.durationText = `${hours}j`;
+      else updatedBaseActivity.durationText = `${minutes}m`;
+
+      // 4. Tentukan apakah ini membuat Data Baru atau Menimpa Data Lama
+      if (existingMatch) {
+         updatedBaseActivity.id = existingMatch.id; // Tahan ID aslinya agar menimpa data Cloud yang benar
+         activitiesToUpdate.push(updatedBaseActivity);
+      } else {
+         finalNewActivities.push(updatedBaseActivity);
+      }
+    });
+
+    const allActivitiesToCheck = [...finalNewActivities, ...activitiesToUpdate];
+
+    if (allActivitiesToCheck.length > 0) {
+      // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
+      const overlapCheck = checkTimeOverlap(allActivitiesToCheck, parsedData);
+      if (overlapCheck.hasOverlap) {
+         alert(overlapCheck.msg); 
+         return; 
+      }
 
       if (user && db) {
         try {
           const batch = writeBatch(db);
-          newActivities.forEach(act => {
+          // Tambah yang baru
+          finalNewActivities.forEach(act => {
             const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
             batch.set(docRef, act);
           });
+          // Update yang digabungkan ke data lama
+          activitiesToUpdate.forEach(act => {
+            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
+            batch.update(docRef, act);
+          });
           await batch.commit();
-          showToast('Data berhasil ditambahkan!');
+          showToast('Disimpan & Otomatis Digabungkan!');
         } catch(e) {
-          setParsedData(prev => [...prev, ...newActivities]);
-          showToast('Disimpan sementara (Mode Offline)');
+          setParsedData(prev => {
+             const newData = prev.map(item => {
+                const updated = activitiesToUpdate.find(u => u.id === item.id);
+                return updated ? updated : item;
+             });
+             return [...newData, ...finalNewActivities];
+          });
+          showToast('Disimpan & Digabung (Mode Offline)');
         }
       } else {
-        setParsedData(prev => [...prev, ...newActivities]);
-        showToast('Disimpan sementara (Mode Offline)');
+        setParsedData(prev => {
+           const newData = prev.map(item => {
+              const updated = activitiesToUpdate.find(u => u.id === item.id);
+              return updated ? updated : item;
+           });
+           return [...newData, ...finalNewActivities];
+        });
+        showToast('Disimpan & Digabung (Mode Offline)');
       }
     } else {
       showToast('Tidak ada format data valid yang ditemukan.');
