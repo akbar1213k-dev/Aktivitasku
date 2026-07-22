@@ -328,7 +328,7 @@ export default function App() {
     setTimeout(() => setToast(''), 3000);
   };
 
-  // --- LOGIKA TOMBOL SCROLL TO TOP ---
+  // --- LOGIKA TOMBOL SCROLL TO TOP (DIPERBAIKI) ---
   const handleScrollToTopClick = () => {
     if (!isScrollButtonActive) {
       // KLIK PERTAMA: Aktifkan mode terang (100% opacity)
@@ -337,13 +337,12 @@ export default function App() {
       // Bersihkan timer lama jika ada, lalu mulai timer baru 3 detik
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = setTimeout(() => {
-        setIsScrollButtonActive(false); // Kembali pudar setelah 3 detik
+        setIsScrollButtonActive(false); // Kembali pudar (10%) setelah 3 detik
       }, 3000);
     } else {
-      // KLIK KEDUA (Saat terang): Scroll ke atas!
-      if (topContainerRef.current) {
-        topContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      // KLIK KEDUA (Saat terang): Scroll mulus ke paling atas layar tanpa geser samping
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      
       setIsScrollButtonActive(false); // Langsung pudarkan lagi setelah scroll
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     }
@@ -1249,9 +1248,6 @@ export default function App() {
 
         <div className="flex-1 pb-28 p-6">
           
-          {/* Jangkar tak terlihat untuk Scroll-to-Top */}
-          <div ref={topContainerRef} className="absolute top-0 w-full h-1 pointer-events-none"></div>
-
           {activeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in duration-300">
               <div className="flex justify-between items-center mb-6">
@@ -1377,8 +1373,8 @@ export default function App() {
                     onClick={handleScrollToTopClick}
                     className={`pointer-events-auto p-3 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ${
                       isScrollButtonActive 
-                        ? 'opacity-100 scale-110 bg-orange-500 text-white shadow-orange-500/50' // Mode Terang 100% (Selama 3 detik)
-                        : 'opacity-20 scale-100 bg-gray-500 text-white hover:opacity-40' // Mode Transparan/Pudar (10%-20%)
+                        ? 'opacity-100 scale-110 bg-orange-500 text-white shadow-orange-500/50' // Mode Terang 100% saat diklik
+                        : 'opacity-10 scale-100 bg-gray-500 text-white hover:opacity-40' // Mode Transparan 10% saat diam
                     }`}
                     aria-label="Kembali ke Atas"
                   >
