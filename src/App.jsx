@@ -1264,9 +1264,22 @@ export default function App() {
               </div>
               {dateFilter === 'custom' && (
                 <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customStartDate} 
+                    onChange={e => {
+                      setCustomStartDate(e.target.value);
+                      setCustomEndDate(e.target.value); // Baris ini yang membuat tgl akhir otomatis mengikuti tgl awal
+                    }} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                   <span className="self-center text-gray-400 font-bold">-</span>
-                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customEndDate} 
+                    onChange={e => setCustomEndDate(e.target.value)} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                 </div>
               )}
               
@@ -1404,9 +1417,22 @@ export default function App() {
 
               {dateFilter === 'custom' && (
                 <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customStartDate} 
+                    onChange={e => {
+                      setCustomStartDate(e.target.value);
+                      setCustomEndDate(e.target.value);
+                    }} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                   <span className="self-center text-gray-400 font-bold">-</span>
-                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customEndDate} 
+                    onChange={e => setCustomEndDate(e.target.value)} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                 </div>
               )}
               
@@ -1773,9 +1799,22 @@ export default function App() {
 
               {dateFilter === 'custom' && (
                 <div className="flex gap-2 mb-4 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-                  <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customStartDate} 
+                    onChange={e => {
+                      setCustomStartDate(e.target.value);
+                      setCustomEndDate(e.target.value);
+                    }} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                   <span className="self-center text-gray-400 font-bold">-</span>
-                  <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" />
+                  <input 
+                    type="date" 
+                    value={customEndDate} 
+                    onChange={e => setCustomEndDate(e.target.value)} 
+                    className="flex-1 bg-white border border-gray-200 rounded-xl text-[10px] p-2 outline-none font-bold text-gray-600" 
+                  />
                 </div>
               )}
 
