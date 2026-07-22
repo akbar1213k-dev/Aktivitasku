@@ -1238,9 +1238,9 @@ export default function App() {
     return isDark ? themes[index].dark : themes[index].light;
   };
 
-  return (
-    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
-      <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
+ return (
+    <div className={`flex justify-center min-h-screen font-sans transition-colors duration-300 overflow-x-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-gray-200'}`}>
+      <div className={`w-full max-w-md min-h-screen relative flex flex-col shadow-2xl transition-colors duration-300 overflow-x-hidden ${isDarkMode ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
         {toast && (
           <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-full text-sm font-bold z-[60] shadow-lg animate-in fade-in slide-in-from-top-4">
             {toast}
@@ -1370,19 +1370,21 @@ export default function App() {
                 })
               )}
 
-              {/* --- TOMBOL SCROLL TO TOP MENGAMBANG DI AKTIVITAS SAYA --- */}
-              {sortedHomeData.length > 25 && ( // Hanya muncul jika aktivitas cukup banyak untuk di-scroll
-                <button
-                  onClick={handleScrollToTopClick}
-                  className={`fixed bottom-[100px] right-6 p-3 rounded-full shadow-lg backdrop-blur-sm z-40 transition-all duration-300 ${
-                    isScrollButtonActive 
-                      ? 'opacity-100 scale-110 bg-orange-500 text-white shadow-orange-500/50' // Mode Terang 100%
-                      : 'opacity-20 scale-100 bg-gray-500 text-white hover:opacity-40' // Mode Pudar (Sekitar 10%-20% opacity)
-                  }`}
-                  aria-label="Kembali ke Atas"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 15l7-7 7 7"></path></svg>
-                </button>
+              {/* --- TOMBOL SCROLL TO TOP MENGAMBANG --- */}
+              {sortedHomeData.length > 25 && ( // Syarat ketat: HANYA MUNCUL JIKA AKTIVITAS > 25 DATA
+                <div className="fixed bottom-[100px] left-1/2 transform -translate-x-1/2 w-full max-w-md flex justify-end px-6 pointer-events-none z-40">
+                  <button
+                    onClick={handleScrollToTopClick}
+                    className={`pointer-events-auto p-3 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ${
+                      isScrollButtonActive 
+                        ? 'opacity-100 scale-110 bg-orange-500 text-white shadow-orange-500/50' // Mode Terang 100% (Selama 3 detik)
+                        : 'opacity-20 scale-100 bg-gray-500 text-white hover:opacity-40' // Mode Transparan/Pudar (10%-20%)
+                    }`}
+                    aria-label="Kembali ke Atas"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 15l7-7 7 7"></path></svg>
+                  </button>
+                </div>
               )}
               {/* --------------------------------------- */}
 
