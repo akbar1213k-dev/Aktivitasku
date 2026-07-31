@@ -50,7 +50,7 @@ export default function App() {
   
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Jam mulai menjadi 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi otomatis 29 menit, selesai jam 16.13)`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi 29m, selesai 16.13)\n\n8. Sambung Akhir (.at / .at[angka] Nama):\n[12/10 14.08] : .at7 Belajar\n(Mulai 7m setelah aktivitas sblmnya selesai, berakhir 14.08)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -481,9 +481,15 @@ export default function App() {
     lines.forEach((line) => {
       const match = line.match(regex);
       if (match) {
+        let message = match[4].trim();
+
+        // 0. MEKANISME KOMENTAR (.h) - Baris ini diabaikan sepenuhnya
+        if (message.toLowerCase().startsWith('.h ') || message.toLowerCase() === '.h') {
+          return;
+        }
+
         const date = match[1];
         let time = match[2];
-        let message = match[4].trim();
 
         // 1. PRIORITAS UTAMA: Ekstrak Jam Eksplisit Terlebih Dahulu (contoh "17.00 . Makan .d23")
         let hasExplicitTime = false;
@@ -494,9 +500,10 @@ export default function App() {
           hasExplicitTime = true;
         }
 
-        // 2. MEKANISME DURASI LANGSUNG (Makan .d29 atau . Shalat .d21)
         let explicitStart = null;
         let explicitEnd = null;
+
+        // 2. MEKANISME DURASI LANGSUNG (Makan .d29 atau . Shalat .d21)
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
         if (durMatch) {
           message = durMatch[1].trim(); // Membuang ".d23" dari string pesan
@@ -517,12 +524,27 @@ export default function App() {
           }
         }
 
-        // 3. MEKANISME SHIFT WAKTU MUNDUR (.23 Nyuci)
-        const shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
-        if (shiftMatch && !durMatch) { // Tidak dijalankan jika format .d sudah dipakai
-          const shiftMins = parseInt(shiftMatch[1], 10);
-          time = subtractMinutes(time, shiftMins); 
-          message = shiftMatch[2].trim();
+        // 3. MEKANISME SAMBUNG AKTIVITAS TERAKHIR (.at atau .at7)
+        let atMatch = null;
+        if (!durMatch && !hasExplicitTime) {
+          atMatch = message.match(/^\.at(\d*)\s+(.*)/i);
+          if (atMatch) {
+            const delayMins = parseInt(atMatch[1] || '0', 10);
+            explicitStart = lastTime ? addMinutes(lastTime, delayMins) : time;
+            explicitEnd = time; // Jam akhir menggunakan jam pesan
+            message = atMatch[2].trim();
+          }
+        }
+
+        // 4. MEKANISME SHIFT WAKTU MUNDUR (.23 Nyuci)
+        let shiftMatch = null;
+        if (!durMatch && !atMatch) { // Tidak dijalankan jika format .d atau .at sudah dipakai
+          shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
+          if (shiftMatch) {
+            const shiftMins = parseInt(shiftMatch[1], 10);
+            time = subtractMinutes(time, shiftMins); 
+            message = shiftMatch[2].trim();
+          }
         }
 
         const isEndMarker = message === '.';
@@ -2335,6 +2357,26 @@ export default function App() {
                   <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
                     [10/7 16.13] : Makan .d29<br/>
                     <span className="text-gray-500 italic">// Durasi 29 menit, selesai tepat 16.13</span>
+                  </code>
+                </div>
+
+                {/* Aturan 8 (BARU) */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">8. Sambung Akhir (.at)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.at) atau (.at[angka]) untuk memulai aktivitas di jam berakhirnya aktivitas sebelumnya (ditambah angka menit).</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [10/7 14.08] : .at7 Belajar<br/>
+                    <span className="text-gray-500 italic">// Mulai 7 menit setelah aktivitas sebelumnya, selesai di 14.08</span>
+                  </code>
+                </div>
+
+                {/* Aturan 9 (BARU) */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">9. Komentar (.h)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.h) di awal untuk menghiraukan baris tersebut sepenuhnya (Berguna untuk catatan bebas).</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [10/7 15.00] : .h Istirahat dlu cape<br/>
+                    <span className="text-gray-500 italic">// Sistem tidak akan merekam ini</span>
                   </code>
                 </div>
 
