@@ -1512,6 +1512,89 @@ export default function App() {
               </div>
               {/* -------------------------------------------------- */}
 
+              {/* --- PERBANDINGAN: DATA ANALIS VS TOXIC TIME (HARI INI) --- */}
+              {(() => {
+                // Filter hanya data aktivitas hari ini (00:00 - 23:59 di hari yang sama) mengabaikan filter atas
+                const todayActivities = parsedData.filter(item => {
+                  const itemDateObj = parseDateStr(item.date);
+                  const todayObj = new Date();
+                  return itemDateObj.getDate() === todayObj.getDate() && 
+                         itemDateObj.getMonth() === todayObj.getMonth() &&
+                         itemDateObj.getFullYear() === todayObj.getFullYear();
+                });
+
+                let minsLearn = 0;
+                let minsToxic = 0;
+
+                // Otomatis menjumlahkan durasi untuk nama yang mengandung teks tersebut (huruf besar/kecil diabaikan)
+                todayActivities.forEach(act => {
+                  const actName = (act.activity || '').toLowerCase();
+                  if (actName.includes('data analis') || actName.includes('data analysis')) {
+                    minsLearn += act.rawMinutes || 0;
+                  } else if (actName.includes('toxic time') || actName.includes('toxic')) {
+                    minsToxic += act.rawMinutes || 0;
+                  }
+                });
+
+                const totalCompare = minsLearn + minsToxic;
+                const pctLearn = totalCompare > 0 ? (minsLearn / totalCompare) * 100 : 0;
+                const pctToxic = totalCompare > 0 ? (minsToxic / totalCompare) * 100 : 0;
+
+                // Mencari FPB (Faktor Persekutuan Terbesar) untuk menyederhanakan rasio/perbandingan
+                const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+                let rLearn = 0, rToxic = 0;
+                
+                if (minsLearn > 0 && minsToxic > 0) {
+                  const divisor = gcd(minsLearn, minsToxic);
+                  rLearn = minsLearn / divisor;
+                  rToxic = minsToxic / divisor;
+                } else if (minsLearn > 0) {
+                  rLearn = 1; rToxic = 0;
+                } else if (minsToxic > 0) {
+                  rLearn = 0; rToxic = 1;
+                }
+
+                return (
+                  <div className={`p-5 rounded-3xl shadow-sm border mt-6 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                    <div className="flex justify-between items-end mb-3">
+                      <div>
+                        <p className="text-blue-500 text-[10px] font-extrabold uppercase tracking-wider mb-1">Data Analis</p>
+                        <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                          {rLearn} : {rToxic} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsLearn)})</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-red-500 text-[10px] font-extrabold uppercase tracking-wider mb-1">Toxic Time</p>
+                        <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                          {rToxic} : {rLearn} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsToxic)})</span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar Perbandingan */}
+                    <div className={`w-full h-4 rounded-full flex overflow-hidden shadow-inner ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                      {totalCompare === 0 ? (
+                         <div className={`h-full w-full flex items-center justify-center transition-all duration-500 ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`}>
+                           <span className="text-[8px] font-bold text-gray-500 opacity-80">Belum ada data perbandingan hari ini</span>
+                         </div>
+                      ) : (
+                         <>
+                           <div className="bg-blue-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctLearn}%` }}>
+                             {/* Hanya muncul di sisi Kiri (Data Analis) jika porsinya lebih besar */}
+                             {pctLearn > pctToxic && <span className="text-[8px] font-bold text-white opacity-90">{pctLearn.toFixed(0)}%</span>}
+                           </div>
+                           <div className="bg-red-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctToxic}%` }}>
+                             {/* Hanya muncul di sisi Kanan (Toxic Time) jika porsinya lebih besar */}
+                             {pctToxic > pctLearn && <span className="text-[8px] font-bold text-white opacity-90">{pctToxic.toFixed(0)}%</span>}
+                           </div>
+                         </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* -------------------------------------------------- */}
+
               {/* --- STATISTIK KATEGORI --- */}
               <div className="mt-6 space-y-4">
                 <h3 className={`text-lg font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Statistik per Kategori</h3>
