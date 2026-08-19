@@ -163,6 +163,12 @@ export default function App() {
   // STATE BARU UNTUK MEMUNCULKAN DETAIL KATEGORI DI STATISTIK
   const [selectedCategoryStats, setSelectedCategoryStats] = useState(null);
   
+  // STATE BARU UNTUK FITUR PERBANDINGAN DINAMIS
+  const [compareLeftKw, setCompareLeftKw] = useState('data analis');
+  const [compareRightKw, setCompareRightKw] = useState('toxic time');
+  const [isEditingLeftKw, setIsEditingLeftKw] = useState(false);
+  const [isEditingRightKw, setIsEditingRightKw] = useState(false);
+
   // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
   useEffect(() => {
     localStorage.setItem('offline_activities', JSON.stringify(parsedData));
@@ -1512,9 +1518,9 @@ export default function App() {
               </div>
               {/* -------------------------------------------------- */}
 
-              {/* --- PERBANDINGAN: DATA ANALIS VS TOXIC TIME (HARI INI) --- */}
+              {/* --- PERBANDINGAN DINAMIS: KLIK 2X UNTUK FILTER (HARI INI) --- */}
               {(() => {
-                // Filter hanya data aktivitas hari ini (00:00 - 23:59 di hari yang sama) mengabaikan filter atas
+                // Filter hanya data aktivitas hari ini (00:00 - 23:59 di hari yang sama)
                 const todayActivities = parsedData.filter(item => {
                   const itemDateObj = parseDateStr(item.date);
                   const todayObj = new Date();
@@ -1523,52 +1529,111 @@ export default function App() {
                          itemDateObj.getFullYear() === todayObj.getFullYear();
                 });
 
-                let minsLearn = 0;
-                let minsToxic = 0;
+                let minsLeft = 0;
+                let minsRight = 0;
 
-                // Otomatis menjumlahkan durasi untuk nama yang mengandung teks tersebut (huruf besar/kecil diabaikan)
+                // FUNGSI PINTAR: Mengecek apakah nama aktivitas mengandung SEMUA kata kunci (tidak berurutan tidak masalah)
+                const matchKeywords = (text, keywordString) => {
+                  if (!keywordString.trim()) return false;
+                  const keywords = keywordString.toLowerCase().split(/\s+/); // Memecah berdasarkan spasi
+                  const lowerText = text.toLowerCase();
+                  return keywords.every(kw => lowerText.includes(kw)); // Wajib mengandung semua potongan kata
+                };
+
                 todayActivities.forEach(act => {
-                  const actName = (act.activity || '').toLowerCase();
-                  if (actName.includes('data analis') || actName.includes('data analysis')) {
-                    minsLearn += act.rawMinutes || 0;
-                  } else if (actName.includes('toxic time') || actName.includes('toxic')) {
-                    minsToxic += act.rawMinutes || 0;
+                  const actName = (act.activity || '');
+                  if (matchKeywords(actName, compareLeftKw)) {
+                    minsLeft += act.rawMinutes || 0;
+                  } else if (matchKeywords(actName, compareRightKw)) {
+                    minsRight += act.rawMinutes || 0;
                   }
                 });
 
-                const totalCompare = minsLearn + minsToxic;
-                const pctLearn = totalCompare > 0 ? (minsLearn / totalCompare) * 100 : 0;
-                const pctToxic = totalCompare > 0 ? (minsToxic / totalCompare) * 100 : 0;
+                const totalCompare = minsLeft + minsRight;
+                const pctLeft = totalCompare > 0 ? (minsLeft / totalCompare) * 100 : 0;
+                const pctRight = totalCompare > 0 ? (minsRight / totalCompare) * 100 : 0;
 
-                // Mencari FPB (Faktor Persekutuan Terbesar) untuk menyederhanakan rasio/perbandingan
-                const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-                let rLearn = 0, rToxic = 0;
-                
-                if (minsLearn > 0 && minsToxic > 0) {
-                  const divisor = gcd(minsLearn, minsToxic);
-                  rLearn = minsLearn / divisor;
-                  rToxic = minsToxic / divisor;
-                } else if (minsLearn > 0) {
-                  rLearn = 1; rToxic = 0;
-                } else if (minsToxic > 0) {
-                  rLearn = 0; rToxic = 1;
+                // MATEMATIKA RASIO (Menjadikan angka terkecil sebagai basis 1)
+                let rLeft = '0';
+                let rRight = '0';
+                if (minsLeft > 0 && minsRight > 0) {
+                  if (minsLeft < minsRight) {
+                    rLeft = '1';
+                    rRight = (minsRight / minsLeft).toFixed(2); // Dibulatkan 2 angka di belakang koma
+                  } else if (minsRight < minsLeft) {
+                    rRight = '1';
+                    rLeft = (minsLeft / minsRight).toFixed(2);
+                  } else {
+                    rLeft = '1'; 
+                    rRight = '1';
+                  }
+                } else if (minsLeft > 0) {
+                  rLeft = '1'; rRight = '0';
+                } else if (minsRight > 0) {
+                  rLeft = '0'; rRight = '1';
                 }
+
+                // Helper untuk menghilangkan .00 jika angkanya bulat sempurna (misal 2.00 jadi 2)
+                const formatRatio = (val) => val.toString().endsWith('.00') ? val.toString().replace('.00', '') : val;
 
                 return (
                   <div className={`p-5 rounded-3xl shadow-sm border mt-6 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
-                    <div className="flex justify-between items-end mb-3">
-                      <div>
-                        <p className="text-blue-500 text-[10px] font-extrabold uppercase tracking-wider mb-1">Data Analis</p>
+                    <div className="flex justify-between items-end mb-3 gap-4">
+                      
+                      {/* --- SISI KIRI (ORANYE) --- */}
+                      <div className="flex-1 min-w-0">
+                        {isEditingLeftKw ? (
+                          <input 
+                            autoFocus
+                            type="text"
+                            value={compareLeftKw}
+                            onChange={(e) => setCompareLeftKw(e.target.value)}
+                            onBlur={() => setIsEditingLeftKw(false)}
+                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingLeftKw(false)}
+                            className={`w-full text-[10px] font-extrabold uppercase border-b-2 border-orange-500 outline-none bg-transparent mb-1 text-orange-500 ${isDarkMode ? 'placeholder-orange-700' : 'placeholder-orange-200'}`}
+                            placeholder="Ketik filter..."
+                          />
+                        ) : (
+                          <p 
+                            onDoubleClick={() => setIsEditingLeftKw(true)}
+                            className="text-orange-500 text-[10px] font-extrabold uppercase tracking-wider mb-1 cursor-pointer truncate hover:opacity-70 transition-opacity"
+                            title="Klik 2x untuk ubah filter pencarian"
+                          >
+                            {compareLeftKw || 'KLIK 2X UNTUK FILTER'}
+                          </p>
+                        )}
                         <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                          {rLearn} : {rToxic} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsLearn)})</span>
+                          {formatRatio(rLeft)} : {formatRatio(rRight)} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsLeft)})</span>
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-red-500 text-[10px] font-extrabold uppercase tracking-wider mb-1">Toxic Time</p>
+
+                      {/* --- SISI KANAN (ABU-ABU) --- */}
+                      <div className="flex-1 min-w-0 text-right">
+                        {isEditingRightKw ? (
+                          <input 
+                            autoFocus
+                            type="text"
+                            value={compareRightKw}
+                            onChange={(e) => setCompareRightKw(e.target.value)}
+                            onBlur={() => setIsEditingRightKw(false)}
+                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingRightKw(false)}
+                            className={`w-full text-[10px] font-extrabold uppercase border-b-2 border-gray-500 outline-none bg-transparent mb-1 text-right text-gray-500 ${isDarkMode ? 'placeholder-gray-600' : 'placeholder-gray-300'}`}
+                            placeholder="Ketik filter..."
+                          />
+                        ) : (
+                          <p 
+                            onDoubleClick={() => setIsEditingRightKw(true)}
+                            className="text-gray-500 text-[10px] font-extrabold uppercase tracking-wider mb-1 cursor-pointer truncate hover:opacity-70 transition-opacity"
+                            title="Klik 2x untuk ubah filter pencarian"
+                          >
+                            {compareRightKw || 'KLIK 2X UNTUK FILTER'}
+                          </p>
+                        )}
                         <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                          {rToxic} : {rLearn} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsToxic)})</span>
+                          {formatRatio(rRight)} : {formatRatio(rLeft)} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsRight)})</span>
                         </p>
                       </div>
+
                     </div>
                     
                     {/* Progress Bar Perbandingan */}
@@ -1579,13 +1644,13 @@ export default function App() {
                          </div>
                       ) : (
                          <>
-                           <div className="bg-blue-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctLearn}%` }}>
-                             {/* Hanya muncul di sisi Kiri (Data Analis) jika porsinya lebih besar */}
-                             {pctLearn > pctToxic && <span className="text-[8px] font-bold text-white opacity-90">{pctLearn.toFixed(0)}%</span>}
+                           <div className="bg-orange-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctLeft}%` }}>
+                             {/* Persentase hanya muncul jika porsi lebih besar */}
+                             {pctLeft > pctRight && <span className="text-[8px] font-bold text-white opacity-90">{pctLeft.toFixed(0)}%</span>}
                            </div>
-                           <div className="bg-red-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctToxic}%` }}>
-                             {/* Hanya muncul di sisi Kanan (Toxic Time) jika porsinya lebih besar */}
-                             {pctToxic > pctLearn && <span className="text-[8px] font-bold text-white opacity-90">{pctToxic.toFixed(0)}%</span>}
+                           <div className="bg-gray-400 dark:bg-gray-500 h-full flex items-center justify-center transition-all duration-500" style={{ width: `${pctRight}%` }}>
+                             {/* Persentase hanya muncul jika porsi lebih besar */}
+                             {pctRight > pctLeft && <span className="text-[8px] font-bold text-white opacity-90">{pctRight.toFixed(0)}%</span>}
                            </div>
                          </>
                       )}
