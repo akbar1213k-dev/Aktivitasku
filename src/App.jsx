@@ -164,10 +164,46 @@ export default function App() {
   const [selectedCategoryStats, setSelectedCategoryStats] = useState(null);
   
   // STATE BARU UNTUK FITUR PERBANDINGAN DINAMIS
-  const [compareLeftKw, setCompareLeftKw] = useState('data analis');
-  const [compareRightKw, setCompareRightKw] = useState('toxic time');
+  const [compareLeftKw, setCompareLeftKw] = useState(() => localStorage.getItem('compareLeftKw') || 'DATA ANALIS');
+  const [compareRightKw, setCompareRightKw] = useState(() => localStorage.getItem('compareRightKw') || 'TOXIC TIME');
   const [isEditingLeftKw, setIsEditingLeftKw] = useState(false);
   const [isEditingRightKw, setIsEditingRightKw] = useState(false);
+  const [tempLeftKw, setTempLeftKw] = useState(''); // Menyimpan teks sementara saat mengetik
+  const [tempRightKw, setTempRightKw] = useState('');
+
+  // STATE UNTUK POPUP DAFTAR AKTIVITAS HASIL FILTER
+  const [selectedFilterStats, setSelectedFilterStats] = useState(null); // 'left' atau 'right'
+
+  // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
+  useEffect(() => {
+    localStorage.setItem('compareLeftKw', compareLeftKw);
+    localStorage.setItem('compareRightKw', compareRightKw);
+    
+    // Sinkronisasi ke Firebase
+    if (user && db) {
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'compareFilters');
+      updateDoc(docRef, { left: compareLeftKw, right: compareRightKw }).catch(async (e) => {
+         // Jika dokumen belum ada, buat baru
+         if (e.code === 'not-found') {
+            await writeBatch(db).set(docRef, { left: compareLeftKw, right: compareRightKw }).commit().catch(console.error);
+         }
+      });
+    }
+  }, [compareLeftKw, compareRightKw, user, db]);
+
+  // Mengambil filter dari Firebase saat login
+  useEffect(() => {
+    if (!user || !db) return;
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'compareFilters');
+    const unsubscribeFilters = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.left) setCompareLeftKw(data.left);
+        if (data.right) setCompareRightKw(data.right);
+      }
+    });
+    return () => unsubscribeFilters();
+  }, [user]);
 
   // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
   useEffect(() => {
@@ -1532,12 +1568,25 @@ export default function App() {
                 let minsLeft = 0;
                 let minsRight = 0;
 
-                // FUNGSI PINTAR: Mengecek apakah nama aktivitas mengandung SEMUA kata kunci (tidak berurutan tidak masalah)
+                // FUNGSI PINTAR: Mengecek Multi-Kondisi (AND / OR)
                 const matchKeywords = (text, keywordString) => {
-                  if (!keywordString.trim()) return false;
-                  const keywords = keywordString.toLowerCase().split(/\s+/); // Memecah berdasarkan spasi
-                  const lowerText = text.toLowerCase();
-                  return keywords.every(kw => lowerText.includes(kw)); // Wajib mengandung semua potongan kata
+                  if (!keywordString || !keywordString.trim()) return false;
+                  
+                  // Pecah berdasarkan simbol '&' (Logika OR: Salah satu grup harus benar)
+                  const orGroups = keywordString.toUpperCase().split('&');
+                  const upperText = text.toUpperCase();
+
+                  return orGroups.some(group => {
+                     // Dalam satu grup, pecah berdasarkan spasi (Logika AND: Semua kata harus ada)
+                     const andKeywords = group.trim().split(/\s+/).filter(kw => kw.length > 0);
+                     if (andKeywords.length === 0) return false;
+                     return andKeywords.every(kw => upperText.includes(kw));
+                  });
+                };
+
+                // Helper untuk mensterilkan input pengguna saat di-save
+                const sanitizeFilterInput = (input) => {
+                   return input.replace(/ and /gi, ' ').replace(/ or /gi, ' & ').toUpperCase();
                 };
 
                 todayActivities.forEach(act => {
@@ -1545,6 +1594,7 @@ export default function App() {
                   if (matchKeywords(actName, compareLeftKw)) {
                     minsLeft += act.rawMinutes || 0;
                   } else if (matchKeywords(actName, compareRightKw)) {
+                    // Pakai 'else if' agar aktivitas tidak dihitung ganda jika masuk kedua kriteria
                     minsRight += act.rawMinutes || 0;
                   }
                 });
@@ -1586,51 +1636,81 @@ export default function App() {
                           <input 
                             autoFocus
                             type="text"
-                            value={compareLeftKw}
-                            onChange={(e) => setCompareLeftKw(e.target.value)}
-                            onBlur={() => setIsEditingLeftKw(false)}
-                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingLeftKw(false)}
+                            value={tempLeftKw}
+                            onChange={(e) => setTempLeftKw(e.target.value)}
+                            onBlur={() => {
+                               setIsEditingLeftKw(false);
+                               if(tempLeftKw.trim() !== '') setCompareLeftKw(sanitizeFilterInput(tempLeftKw));
+                            }}
+                            onKeyDown={(e) => {
+                               if (e.key === 'Enter') {
+                                 setIsEditingLeftKw(false);
+                                 if(tempLeftKw.trim() !== '') setCompareLeftKw(sanitizeFilterInput(tempLeftKw));
+                               }
+                            }}
                             className={`w-full text-[10px] font-extrabold uppercase border-b-2 border-orange-500 outline-none bg-transparent mb-1 text-orange-500 ${isDarkMode ? 'placeholder-orange-700' : 'placeholder-orange-200'}`}
-                            placeholder="Ketik filter..."
+                            placeholder="Contoh: data and analis or baca"
                           />
                         ) : (
                           <p 
-                            onDoubleClick={() => setIsEditingLeftKw(true)}
+                            onDoubleClick={() => { setTempLeftKw(compareLeftKw); setIsEditingLeftKw(true); }}
                             className="text-orange-500 text-[10px] font-extrabold uppercase tracking-wider mb-1 cursor-pointer truncate hover:opacity-70 transition-opacity"
                             title="Klik 2x untuk ubah filter pencarian"
                           >
                             {compareLeftKw || 'KLIK 2X UNTUK FILTER'}
                           </p>
                         )}
-                        <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                          {formatRatio(rLeft)} : {formatRatio(rRight)} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsLeft)})</span>
+                        <p className={`text-lg font-black flex flex-wrap items-baseline gap-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                          {formatRatio(rLeft)}
+                          <span 
+                             onDoubleClick={() => setSelectedFilterStats('left')}
+                             className="text-xs font-bold text-gray-400 cursor-pointer hover:text-orange-500 hover:underline transition-colors"
+                             title="Klik 2x untuk melihat rincian aktivitas"
+                          >
+                             ({formatMins(minsLeft)})
+                          </span>
                         </p>
                       </div>
 
                       {/* --- SISI KANAN (ABU-ABU) --- */}
-                      <div className="flex-1 min-w-0 text-right">
+                      <div className="flex-1 min-w-0 text-right flex flex-col items-end">
                         {isEditingRightKw ? (
                           <input 
                             autoFocus
                             type="text"
-                            value={compareRightKw}
-                            onChange={(e) => setCompareRightKw(e.target.value)}
-                            onBlur={() => setIsEditingRightKw(false)}
-                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingRightKw(false)}
-                            className={`w-full text-[10px] font-extrabold uppercase border-b-2 border-gray-500 outline-none bg-transparent mb-1 text-right text-gray-500 ${isDarkMode ? 'placeholder-gray-600' : 'placeholder-gray-300'}`}
-                            placeholder="Ketik filter..."
+                            value={tempRightKw}
+                            onChange={(e) => setTempRightKw(e.target.value)}
+                            onBlur={() => {
+                               setIsEditingRightKw(false);
+                               if(tempRightKw.trim() !== '') setCompareRightKw(sanitizeFilterInput(tempRightKw));
+                            }}
+                            onKeyDown={(e) => {
+                               if (e.key === 'Enter') {
+                                 setIsEditingRightKw(false);
+                                 if(tempRightKw.trim() !== '') setCompareRightKw(sanitizeFilterInput(tempRightKw));
+                               }
+                            }}
+                            className={`w-full text-[10px] font-extrabold uppercase border-b-2 border-gray-400 outline-none bg-transparent mb-1 text-right text-gray-500 ${isDarkMode ? 'placeholder-gray-600' : 'placeholder-gray-300'}`}
+                            placeholder="Contoh: santai or tidur"
                           />
                         ) : (
                           <p 
-                            onDoubleClick={() => setIsEditingRightKw(true)}
+                            onDoubleClick={() => { setTempRightKw(compareRightKw); setIsEditingRightKw(true); }}
                             className="text-gray-500 text-[10px] font-extrabold uppercase tracking-wider mb-1 cursor-pointer truncate hover:opacity-70 transition-opacity"
                             title="Klik 2x untuk ubah filter pencarian"
                           >
                             {compareRightKw || 'KLIK 2X UNTUK FILTER'}
                           </p>
                         )}
-                        <p className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                          {formatRatio(rRight)} : {formatRatio(rLeft)} <span className="text-xs font-bold text-gray-400 ml-1">({formatMins(minsRight)})</span>
+                        <p className={`text-lg font-black flex flex-wrap flex-row-reverse items-baseline gap-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                          {formatRatio(rRight)}
+                          <span 
+                             onDoubleClick={() => setSelectedFilterStats('right')}
+                             className="text-xs font-bold text-gray-400 cursor-pointer hover:text-gray-600 dark:hover:text-gray-200 hover:underline transition-colors"
+                             title="Klik 2x untuk melihat rincian aktivitas"
+                          >
+                             ({formatMins(minsRight)})
+                          </span>
                         </p>
                       </div>
 
@@ -1726,6 +1806,83 @@ export default function App() {
                 </div>
               )}
               {/* --- BATAS MODAL KATEGORI --- */}
+
+              {/* --- MODAL DAFTAR AKTIVITAS FILTER PERBANDINGAN --- */}
+              {selectedFilterStats && (() => {
+                const keywordToMatch = selectedFilterStats === 'left' ? compareLeftKw : compareRightKw;
+                const isLeft = selectedFilterStats === 'left';
+                
+                // Cek ulang fungsi agar bisa me-render list
+                const matchKeywordsLocal = (text, keywordString) => {
+                  if (!keywordString || !keywordString.trim()) return false;
+                  const orGroups = keywordString.toUpperCase().split('&');
+                  const upperText = text.toUpperCase();
+                  return orGroups.some(group => {
+                     const andKeywords = group.trim().split(/\s+/).filter(kw => kw.length > 0);
+                     if (andKeywords.length === 0) return false;
+                     return andKeywords.every(kw => upperText.includes(kw));
+                  });
+                };
+
+                const filteredActivities = parsedData.filter(item => {
+                  const itemDateObj = parseDateStr(item.date);
+                  const todayObj = new Date();
+                  const isToday = itemDateObj.getDate() === todayObj.getDate() && 
+                                  itemDateObj.getMonth() === todayObj.getMonth() &&
+                                  itemDateObj.getFullYear() === todayObj.getFullYear();
+                  
+                  return isToday && matchKeywordsLocal((item.activity || ''), keywordToMatch);
+                });
+
+                return (
+                  <div className="fixed inset-0 bg-gray-900/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className={`w-full max-w-md max-h-[80vh] flex flex-col rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+                      <div className="flex justify-between items-start mb-4 border-b pb-4 border-dashed border-gray-300 dark:border-gray-700">
+                        <div className="pr-4">
+                          <p className={`text-[10px] font-extrabold tracking-wider uppercase mb-1 ${isLeft ? 'text-orange-500' : 'text-gray-500'}`}>Rincian Filter {isLeft ? 'Sisi Kiri' : 'Sisi Kanan'}</p>
+                          <h3 className={`text-lg font-black leading-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>{keywordToMatch || 'TIDAK ADA FILTER'}</h3>
+                        </div>
+                        <button onClick={() => setSelectedFilterStats(null)} className="p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 rounded-full transition-colors active:scale-90 flex-shrink-0">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto pr-2 space-y-3 mb-4">
+                        {filteredActivities.length === 0 ? (
+                           <div className="text-center py-10 text-gray-400 text-xs font-bold">Tidak ada aktivitas hari ini yang cocok dengan filter.</div>
+                        ) : (
+                          filteredActivities.map(item => (
+                            <div key={item.id} className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                              <p className={`font-bold text-sm mb-1 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>{item.activity}</p>
+                              <p className="text-[11px] text-gray-400 font-medium">
+                                {item.endDate && item.endDate !== item.date 
+                                  ? `${item.date} (${item.startTime}) - ${item.endDate} (${item.endTime})` 
+                                  : `${item.date} • ${item.startTime} - ${item.endTime}`}
+                              </p>
+                              <div className={`mt-2 inline-block px-2 py-1 rounded text-[10px] font-black tracking-wider ${isLeft ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                {item.durationText}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                           if(isLeft) setCompareLeftKw('DATA ANALIS');
+                           else setCompareRightKw('TOXIC TIME');
+                           setSelectedFilterStats(null);
+                        }} 
+                        className="w-full py-3 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-colors dark:bg-red-500/10 dark:hover:bg-red-500/20"
+                      >
+                        Reset Filter ke Default
+                      </button>
+
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* --- BATAS MODAL FILTER PERBANDINGAN --- */}
 
           </div>
       )}
