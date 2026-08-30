@@ -89,6 +89,8 @@ export default function App() {
     }
   });
   const [newNoteText, setNewNoteText] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editNoteText, setEditNoteText] = useState('');
 
   // 1. Simpan catatan otomatis ke memori lokal (Sebagai Backup Offline/Instan)
   useEffect(() => {
@@ -138,6 +140,47 @@ export default function App() {
     }
   };
   
+  // 4. Fungsi Mulai Edit Catatan
+  const handleStartEditNote = (note) => {
+    setEditingNoteId(note.id);
+    setEditNoteText(note.text);
+  };
+
+  // 5. Fungsi Batal Edit Catatan
+  const handleCancelEditNote = () => {
+    setEditingNoteId(null);
+    setEditNoteText('');
+  };
+
+  // 6. Fungsi Simpan Perubahan Catatan (Lokal dulu -> baru Cloud)
+  const handleSaveNoteEdit = async (id) => {
+    if (!editNoteText.trim()) {
+      handleCancelEditNote();
+      return;
+    }
+
+    // Simpan ke layar & lokal seketika
+    setAppNotes(appNotes.map(note => note.id === id ? { ...note, text: editNoteText } : note));
+    handleCancelEditNote();
+    showToast('Catatan Diperbarui!');
+
+    // Sinkronisasi ke Cloud Firebase jika sedang Login
+    if (user && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id.toString());
+        await updateDoc(docRef, { text: editNoteText });
+      } catch(e) {
+        console.warn('Gagal sinkronisasi edit catatan ke cloud, disimpan di lokal.', e);
+      }
+    }
+  };
+
+  // 7. Fungsi Salin Catatan
+  const handleCopyNote = (text) => {
+    navigator.clipboard.writeText(text);
+    showToast('Catatan Disalin!');
+  };
+
   // --- STATE UNTUK LOGIN ---
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
@@ -2070,14 +2113,46 @@ export default function App() {
                   ) : (
                     appNotes.map(note => (
                       <div key={note.id} className="flex justify-end group items-center gap-2">
+                        {/* Tombol Salin */}
+                        <button onClick={() => handleCopyNote(note.text)} className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-500 rounded-full lg:opacity-0 group-hover:opacity-100 transition-opacity dark:bg-blue-500/20 dark:hover:bg-blue-500/40 active:scale-90" title="Salin catatan">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        </button>
+                        {/* Tombol Ubah */}
+                        <button onClick={() => handleStartEditNote(note)} className="p-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-600 rounded-full lg:opacity-0 group-hover:opacity-100 transition-opacity dark:bg-yellow-500/20 dark:hover:bg-yellow-500/40 active:scale-90" title="Ubah catatan">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        </button>
                         {/* Tombol Hapus (Muncul saat disentuh/diarahkan kursor) */}
-                        <button onClick={() => handleDeleteNote(note.id)} className="p-2 bg-red-100 hover:bg-red-200 text-red-500 rounded-full lg:opacity-0 group-hover:opacity-100 transition-opacity dark:bg-red-500/20 dark:hover:bg-red-500/40 active:scale-90">
+                        <button onClick={() => handleDeleteNote(note.id)} className="p-2 bg-red-100 hover:bg-red-200 text-red-500 rounded-full lg:opacity-0 group-hover:opacity-100 transition-opacity dark:bg-red-500/20 dark:hover:bg-red-500/40 active:scale-90" title="Hapus catatan">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                         
                         {/* Bubble Chat */}
                         <div className={`relative max-w-[80%] p-3.5 rounded-[20px] rounded-tr-sm shadow-sm ${isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'}`}>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{note.text}</p>
+                          {editingNoteId === note.id ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editNoteText}
+                                onChange={(e) => setEditNoteText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveNoteEdit(note.id);
+                                  if (e.key === 'Escape') handleCancelEditNote();
+                                }}
+                                autoFocus
+                                className="w-full bg-white text-gray-800 border border-blue-300 rounded-xl px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-400"
+                              />
+                              <div className="flex gap-2 mt-2 justify-end">
+                                <button onClick={() => handleSaveNoteEdit(note.id)} className="px-3 py-1.5 bg-white text-blue-600 rounded-lg text-xs font-bold shadow-sm active:scale-95" title="Simpan">
+                                  Simpan
+                                </button>
+                                <button onClick={handleCancelEditNote} className="px-3 py-1.5 bg-blue-900/30 text-white rounded-lg text-xs font-bold active:scale-95" title="Batal">
+                                  Batal
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{note.text}</p>
+                          )}
                           <p className="text-[9px] text-right mt-2 opacity-70 font-bold tracking-wider">{note.date}</p>
                         </div>
                       </div>
