@@ -6,7 +6,8 @@ import {
   GoogleAuthProvider, signInWithPopup, signOut,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
   RecaptchaVerifier, signInWithPhoneNumber
-} from 'firebase/auth';import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+} from 'firebase/auth';
+import { getFirestore, collection, doc, onSnapshot, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Inisialisasi Firebase
 // KODE BARU:
@@ -1151,12 +1152,12 @@ export default function App() {
     // 3. Urutkan berdasarkan waktu paling awal (untuk dijadikan judul utama)
     activitiesToMerge.sort((a, b) => {
        const dateA = parseDateStr(a.date);
-       const [hA, mA] = a.startTime.replace('.', ':').split(':');
-       dateA.setHours(hA, mA, 0, 0);
+       const [hA, mA] = (a.startTime || '00.00').replace('.', ':').split(':').map(Number);
+       dateA.setHours(hA || 0, mA || 0, 0, 0);
 
        const dateB = parseDateStr(b.date);
-       const [hB, mB] = b.startTime.replace('.', ':').split(':');
-       dateB.setHours(hB, mB, 0, 0);
+       const [hB, mB] = (b.startTime || '00.00').replace('.', ':').split(':').map(Number);
+       dateB.setHours(hB || 0, mB || 0, 0, 0);
 
        return dateA.getTime() - dateB.getTime();
     });
