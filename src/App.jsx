@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import UbahKategori from './UbahKategori'; // <-- BARU DITAMBAHKAN
 import { 
-  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
+  getAuth, onAuthStateChanged, 
   GoogleAuthProvider, signInWithPopup, signOut,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
   RecaptchaVerifier, signInWithPhoneNumber
@@ -27,7 +27,7 @@ try {
   auth = getAuth(app);
   db = getFirestore(app);
   appId = 'whatsapp-tracker'; 
-} catch(e) {
+} catch {
   console.warn("Sistem Cloud sedang offline. Menggunakan penyimpanan lokal sementara.");
 }
 
@@ -40,7 +40,7 @@ export default function App() {
     try {
       const savedData = localStorage.getItem('offline_activities');
       return savedData ? JSON.parse(savedData) : [];
-    } catch (error) {
+    } catch {
       return [];
     }
   });
@@ -48,7 +48,12 @@ export default function App() {
   const [isGuideOpen, setIsGuideOpen] = useState(false); // STATE BARU UNTUK PANDUAN
   const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState('');
-  
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  };
+
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
     const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi 29m, selesai 16.13)\n\n8. Sambung Akhir (.at / .at[angka] Nama):\n[12/10 14.08] : .at7 Belajar\n(Mulai 7m setelah aktivitas sblmnya selesai, berakhir 14.08)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
@@ -79,7 +84,7 @@ export default function App() {
     try {
       const saved = localStorage.getItem('appNotes');
       return saved ? JSON.parse(saved) : [];
-    } catch (error) {
+    } catch {
       return [];
     }
   });
@@ -145,7 +150,6 @@ export default function App() {
   const currentTimeRef = useRef(null); // Ref untuk menggulir ke garis merah
   
   // --- FITUR SCROLL TO TOP ---
-  const topContainerRef = useRef(null); // Ref untuk target paling atas halaman
   const [isScrollButtonActive, setIsScrollButtonActive] = useState(false); // Melacak status transparansi
   const scrollTimerRef = useRef(null); // Timer untuk 3 detik
   // ---------------------------
@@ -190,7 +194,7 @@ export default function App() {
          }
       });
     }
-  }, [compareLeftKw, compareRightKw, user, db]);
+  }, [compareLeftKw, compareRightKw, user]);
 
   // Mengambil filter dari Firebase saat login
   useEffect(() => {
@@ -340,7 +344,7 @@ export default function App() {
       setConfirmationResult(null);
       setOtpCode('');
       setLoginPhone('');
-    } catch (e) {
+    } catch {
       showToast('Kode OTP salah atau kedaluwarsa.');
     }
   };
@@ -361,14 +365,9 @@ export default function App() {
 
       showToast('Logout berhasil. Kembali ke Mode Lokal.');
       setActiveTab('home');
-    } catch(e) {
+    } catch {
       showToast('Gagal Logout.');
     }
-  };
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
   };
 
   // --- LOGIKA TOMBOL SCROLL TO TOP (DIPERBAIKI) ---
@@ -407,7 +406,7 @@ export default function App() {
     const hours = Math.floor(diffMinutes / 60);
     const minutes = diffMinutes % 60;
 
-    let text = '';
+    let text;
     if (hours > 0 && minutes > 0) text = `${hours}j ${minutes}m`;
     else if (hours > 0) text = `${hours}j`;
     else text = `${minutes}m`;
@@ -580,7 +579,7 @@ export default function App() {
         }
 
         // 4. MEKANISME SHIFT WAKTU MUNDUR (.23 Nyuci)
-        let shiftMatch = null;
+        let shiftMatch;
         if (!durMatch && !atMatch) { // Tidak dijalankan jika format .d atau .at sudah dipakai
           shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
           if (shiftMatch) {
@@ -791,7 +790,7 @@ export default function App() {
           });
           await batch.commit();
           showToast('Disimpan & Otomatis Digabungkan!');
-        } catch(e) {
+        } catch {
           setParsedData(prev => {
              const newData = prev.map(item => {
                 const updated = activitiesToUpdate.find(u => u.id === item.id);
@@ -946,7 +945,7 @@ export default function App() {
             showToast('Data diimpor (Mode Offline)');
           }
         }
-      } catch (error) {
+      } catch {
         showToast('Format file JSON tidak valid.');
       }
     };
@@ -998,7 +997,7 @@ export default function App() {
       }
       showToast('Data diperbarui!');
       setEditingItem(null);
-    } catch (e) {
+    } catch {
       showToast('Gagal! Format jam salah.');
     }
   };
@@ -1122,7 +1121,7 @@ export default function App() {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', aktivitasId);
         await updateDoc(docRef, { category: namaKategori });
-      } catch (e) {
+      } catch {
         showToast('Gagal update ke cloud.');
       }
     } else {
@@ -1236,7 +1235,7 @@ export default function App() {
   const totalDurationText = totalHours > 0 ? `${totalHours} Jam ${totalMins} Menit` : `${totalMins} Menit`;
 
   // --- LOGIKA WAKTU TERCATAT VS TIDAK TERCATAT ---
-  let totalPossibleMinutes = 0;
+  let totalPossibleMinutes;
   if (dateFilter === 'today') {
     totalPossibleMinutes = 24 * 60; // 24 Jam
   } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
