@@ -47,6 +47,14 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false); // STATE BARU UNTUK PANDUAN
   const [editingItem, setEditingItem] = useState(null);
+  const [rawLogs, setRawLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('offline_raw_logs');
+      return saved ? saved : '';
+    } catch {
+      return '';
+    }
+  });
   const [toast, setToast] = useState('');
 
   const showToast = (msg) => {
@@ -251,6 +259,20 @@ export default function App() {
       }
     });
     return () => unsubscribeFilters();
+  }, [user]);
+
+  // 4. Listener Sinkronisasi Raw Logs dari Firebase (Real-time)
+  useEffect(() => {
+    if (!user || !db) return;
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setRawLogs(docSnap.data().rawLogs || '');
+      }
+    }, (error) => {
+      console.error("Firestore rawLogs error:", error);
+    });
+    return () => unsubscribe();
   }, [user]);
 
   // Menyimpan setiap perubahan data ke localStorage (sebagai backup offline / cache)
@@ -857,6 +879,26 @@ export default function App() {
       showToast('Tidak ada format data valid yang ditemukan.');
     }
 
+    // --- FITUR RAW LOG: Append teks mentah ke riwayat ---
+    const rawTextToAppend = inputText; // Ambil inputText persis seperti dimasukkan pengguna
+    setRawLogs(prev => prev + (prev ? '\n' : '') + rawTextToAppend); // Gabungkan dengan pemisah baris baru
+
+    // Simpan ke localStorage
+    try {
+      localStorage.setItem('offline_raw_logs', rawLogs);
+    } catch {
+      console.warn('Gagal menyimpan rawLogs ke localStorage');
+    }
+
+    // Sinkronisasi ke Firebase jika sedang Login
+    if (user && db) {
+      try {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs'), { rawLogs });
+      } catch(e) {
+        console.warn('Gagal sinkronisasi rawLogs ke cloud.', e);
+      }
+    }
+
     setIsModalOpen(false);
     setInputText('');
   };
@@ -960,6 +1002,32 @@ export default function App() {
     link.click();
     URL.revokeObjectURL(url);
     showToast('Berhasil diekspor ke CSV!');
+  };
+
+  // Fungsi Unduh Teks Mentah (.txt)
+  const handleDownloadRawLogs = () => {
+    // Format stempel waktu: DDMMYY-HHMM
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const timestamp = `${day}${month}${year}-${hour}${minute}`;
+    const filename = `riwayat_aktivitasku_${timestamp}.txt`;
+
+    // Buat Blob dengan tipe text/plain;charset=utf-8
+    const blob = new Blob([rawLogs], { type: 'text/plain;charset=utf-8' });
+
+    // Buat link download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleImport = async (e) => {
@@ -2179,6 +2247,14 @@ export default function App() {
                 </div>
               </div>
               {/* --- BATAS KODE CATATAN APLIKASI --- */}
+
+                {/* Tombol Unduh Teks Mentah (.txt) */}
+                <button
+                  onClick={handleDownloadRawLogs}
+                  className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-2xl font-bold transition-colors"
+                >
+                  Unduh Teks Mentah (.txt)
+                </button>
               
             </div>
           )}
