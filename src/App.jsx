@@ -1240,7 +1240,28 @@ export default function App() {
         prev.map(item => item.id === aktivitasId ? { ...item, category: namaKategori } : item)
       );
     }
-    showToast('Kategori disimpan!');
+  };
+
+  const handleBulkSetCategory = async (updates) => {
+    if (user && db) {
+      try {
+        const batch = writeBatch(db);
+        updates.forEach(({ id, category }) => {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);
+          batch.update(docRef, { category, isAutoCategorized: true });
+        });
+        await batch.commit();
+      } catch {
+        showToast('Gagal update kategori ke cloud.');
+      }
+    } else {
+      setParsedData(prev =>
+        prev.map(item => {
+          const update = updates.find(u => u.id === item.id);
+          return update ? { ...item, category: update.category, isAutoCategorized: true } : item;
+        })
+      );
+    }
   };
 
   const handleBulkMerge = async () => {
@@ -2037,14 +2058,13 @@ export default function App() {
                     {/* Memanggil Komponen File UbahKategori.jsx */}
                     <UbahKategori 
                       daftarAktivitas={parsedData} 
-                      
-                      // Membentuk ulang daftarKategori agar berbentuk Object {id, nama} untuk UbahKategori.jsx
                       daftarKategori={availableCategories
-                        .filter(cat => cat !== 'Belum Kategori') // Jangan masukkan 'Belum Kategori' sebagai pilihan
+                        .filter(cat => cat !== 'Belum Kategori')
                         .map(cat => ({ id: cat, nama: cat }))
                       } 
-                      
                       fungsiUbahKategori={handleUbahKategoriTunggal} 
+                      fungsiBulkSetCategory={handleBulkSetCategory}
+                      onSelesai={() => setIsUbahKategoriOpen(false)}
                     />
 
                   </div>
