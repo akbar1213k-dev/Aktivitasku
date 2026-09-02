@@ -216,6 +216,15 @@ export default function App() {
   const [expandedId, setExpandedId] = useState(null); // Menyimpan ID aktivitas yang sedang diklik untuk melihat detail
   // STATE BARU UNTUK FITUR UBAH KATEGORI CEPAT
   const [isUbahKategoriOpen, setIsUbahKategoriOpen] = useState(false);
+  // STATE UNTUK ATURAN PENGKATEGORI OTOMATIS (Disimpan ke localStorage & Firestore)
+  const [autoCategorizeRules, setAutoCategorizeRules] = useState(() => {
+    try {
+      const saved = localStorage.getItem('autoCategorizeRules');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   // STATE BARU UNTUK MEMUNCULKAN DETAIL KATEGORI DI STATISTIK
   const [selectedCategoryStats, setSelectedCategoryStats] = useState(null);
   
@@ -271,6 +280,35 @@ export default function App() {
       }
     }, (error) => {
       console.error("Firestore rawLogs error:", error);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // 5. Simpan Aturan Pengkategorian Otomatis ke localStorage & Firestore
+  useEffect(() => {
+    localStorage.setItem('autoCategorizeRules', JSON.stringify(autoCategorizeRules));
+
+    // Sinkronisasi ke Firebase jika sedang Login
+    if (user && db) {
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'autoCategorizeRules');
+      updateDoc(docRef, { rules: autoCategorizeRules }).catch(async (e) => {
+        if (e.code === 'not-found') {
+          await writeBatch(db).set(docRef, { rules: autoCategorizeRules }).commit().catch(console.error);
+        }
+      });
+    }
+  }, [autoCategorizeRules, user]);
+
+  // 6. Sinkronisasi Aturan Pengkategorian Otomatis dari Firestore (Real-time)
+  useEffect(() => {
+    if (!user || !db) return;
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'autoCategorizeRules');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists() && docSnap.data().rules) {
+        setAutoCategorizeRules(docSnap.data().rules);
+      }
+    }, (error) => {
+      console.error("Firestore autoCategorizeRules error:", error);
     });
     return () => unsubscribe();
   }, [user]);
@@ -2064,6 +2102,8 @@ export default function App() {
                       } 
                       fungsiUbahKategori={handleUbahKategoriTunggal} 
                       fungsiBulkSetCategory={handleBulkSetCategory}
+                      autoCategorizeRules={autoCategorizeRules}
+                      setAutoCategorizeRules={setAutoCategorizeRules}
                       onSelesai={() => setIsUbahKategoriOpen(false)}
                     />
 

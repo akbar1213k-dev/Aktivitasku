@@ -74,12 +74,13 @@ function evaluateExpression(text, expression) {
   return parseOr();
 }
 
-export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUbahKategori, fungsiBulkSetCategory, onSelesai }) {
+export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUbahKategori, fungsiBulkSetCategory, autoCategorizeRules, setAutoCategorizeRules, onSelesai }) {
   // mode: 'welcome' (L1) | 'manual' (L2) | 'done'
   const [mode, setMode] = useState('welcome');
 
   // ── L1 States ──
-  const [filterRules, setFilterRules] = useState([{ keyword: '', category: '' }]);
+  // filterRules sekarang dari props (tersimpan di localStorage & Firestore)
+  const filterRules = autoCategorizeRules.length > 0 ? autoCategorizeRules : [{ keyword: '', category: '' }];
   const [allCategories, setAllCategories] = useState(daftarKategori);
   const [notif, setNotif] = useState(null);
   const [notifType, setNotifType] = useState('success'); // 'success' | 'info'
@@ -105,11 +106,21 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
   const uncategorized = daftarAktivitas.filter(a => !a.category || a.category === '');
   const sisaCount = uncategorized.length;
 
-  // ── FILTER RULE HANDLERS ──
-  const addRule = () => setFilterRules(prev => [...prev, { keyword: '', category: '' }]);
-  const removeRule = (idx) => setFilterRules(prev => prev.filter((_, i) => i !== idx));
+  // ── FILTER RULE HANDLERS (Simpan ke parent → localStorage & Firestore) ──
+  const addRule = () => setAutoCategorizeRules(prev => {
+    const current = prev.length > 0 ? prev : [];
+    return [...current, { keyword: '', category: '' }];
+  });
+  const removeRule = (idx) => setAutoCategorizeRules(prev => {
+    const current = prev.length > 0 ? prev : [{ keyword: '', category: '' }];
+    const filtered = current.filter((_, i) => i !== idx);
+    return filtered.length > 0 ? filtered : [{ keyword: '', category: '' }];
+  });
   const updateRule = (idx, field, val) => {
-    setFilterRules(prev => prev.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+    setAutoCategorizeRules(prev => {
+      const current = prev.length > 0 ? prev : [{ keyword: '', category: '' }];
+      return current.map((r, i) => i === idx ? { ...r, [field]: val } : r);
+    });
   };
 
   // ── EKSEKUSI KATEGORISASI OTOMATIS ──
