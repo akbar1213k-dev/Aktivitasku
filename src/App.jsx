@@ -1317,6 +1317,25 @@ export default function App() {
     }
   };
 
+  // FUNGSI VERIFIKASI KATEGORI OTOMATIS (Dipakai UbahKategori.jsx - Layer Verifikasi L3)
+  const handleVerifyCategory = async (aktivitasId, namaKategori, isAutoCategorized) => {
+    const cat = normalizeCategory(namaKategori);
+    if (user && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', aktivitasId);
+        await updateDoc(docRef, { category: cat, isAutoCategorized });
+      } catch {
+        showToast('Gagal update ke cloud.');
+      }
+    } else {
+      setParsedData(prev => 
+        prev.map(item => item.id === aktivitasId
+          ? { ...item, category: cat, isAutoCategorized }
+          : item)
+      );
+    }
+  };
+
   const handleBulkSetCategory = async (updates) => {
     if (user && db) {
       try {
@@ -2139,6 +2158,7 @@ export default function App() {
                       } 
                       fungsiUbahKategori={handleUbahKategoriTunggal} 
                       fungsiBulkSetCategory={handleBulkSetCategory}
+                      fungsiVerifyCategory={handleVerifyCategory}
                       autoCategorizeRules={autoCategorizeRules}
                       setAutoCategorizeRules={setAutoCategorizeRules}
                       onSelesai={() => setIsUbahKategoriOpen(false)}

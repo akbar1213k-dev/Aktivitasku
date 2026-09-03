@@ -74,8 +74,8 @@ function evaluateExpression(text, expression) {
   return parseOr();
 }
 
-export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUbahKategori, fungsiBulkSetCategory, autoCategorizeRules, setAutoCategorizeRules, onSelesai }) {
-  // mode: 'welcome' (L1) | 'manual' (L2) | 'done'
+export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUbahKategori, fungsiBulkSetCategory, fungsiVerifyCategory, autoCategorizeRules, setAutoCategorizeRules, onSelesai }) {
+  // mode: 'welcome' (L1) | 'manual' (L2) | 'verify' (L3) | 'done'
   const [mode, setMode] = useState('welcome');
 
   // ── L1 States ──
@@ -90,6 +90,10 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
   const [manualIdx, setManualIdx] = useState(0);
   // Mode perekaman aturan otomatis ('⚡ Set Jadi Aturan') di L2
   const [isRecordingRule, setIsRecordingRule] = useState(false);
+
+  // ── L3 States (Verifikasi Kategori Otomatis) ──
+  const [verifyQueue, setVerifyQueue] = useState([]);
+  const [verifyIdx, setVerifyIdx] = useState(0);
 
   // Auto-dismiss notification
   useEffect(() => {
@@ -252,6 +256,65 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
     }
   };
 
+  // ── L3 VERIFIKASI HANDLERS ──
+  // Buka layer verifikasi (L3): hanya aktivitas dengan isAutoCategorized:true
+  const handleBukaVerifikasi = () => {
+    const queued = daftarAktivitas.filter(a => a.isAutoCategorized === true);
+    if (queued.length === 0) {
+      setNotifType('info');
+      setNotif('Tidak ada aktivitas otomatis yang perlu diverifikasi');
+      return;
+    }
+    setVerifyQueue(queued);
+    setVerifyIdx(0);
+    setMode('verify');
+  };
+
+  // '✅ Benar': pertahankan kategori saat ini, tandai isAutoCategorized:false
+  const handleVerifyBenar = () => {
+    const act = verifyQueue[verifyIdx];
+    fungsiVerifyCategory(act.id, act.category, false);
+    advanceVerify();
+  };
+
+  // Ganti kategori: perbarui kategori baru, tandai isAutoCategorized:false
+  const handleVerifyGanti = (namaKategori) => {
+    const act = verifyQueue[verifyIdx];
+    fungsiVerifyCategory(act.id, namaKategori, false);
+    advanceVerify();
+  };
+
+  // 'Lewati': pertahankan kategori & isAutoCategorized:true, lanjut berikutnya
+  const handleVerifyLewati = () => {
+    advanceVerify();
+  };
+
+  // 'Berhenti': hentikan alur verifikasi, kembali ke L1
+  const handleVerifyBerhenti = () => {
+    setVerifyQueue([]);
+    setVerifyIdx(0);
+    setMode('welcome');
+  };
+
+  // Maju ke aktivitas verifikasi berikutnya (atau selesai jika habis)
+  const advanceVerify = () => {
+    if (verifyIdx < verifyQueue.length - 1) {
+      setVerifyIdx(prev => prev + 1);
+    } else {
+      setMode('done');
+    }
+  };
+
+  // fmt rentang tanggal & waktu untuk L3
+  const fmtRange = (act) => {
+    const d = act.date || '';
+    const t = `${act.startTime || ''} - ${act.endTime || ''}`;
+    if (act.endDate && act.endDate !== act.date) {
+      return `${d} (${act.startTime || ''}) - ${act.endDate} (${act.endTime || ''})`;
+    }
+    return `${d} • ${t}`;
+  };
+
   // ════════════════════════ RENDER ════════════════════════
   return (
     <div className="p-4 border rounded-2xl shadow-sm bg-white mt-4 dark:bg-gray-800 dark:border-gray-700">
@@ -377,6 +440,15 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
               Semua aktivitas sudah memiliki kategori!
             </div>
           )}
+
+          {/* ── TOMBOL VERIFIKASI HASIL KATEGORI OTOMATIS (L3) ── */}
+          <button
+            onClick={handleBukaVerifikasi}
+            className="mt-3 w-full px-4 py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-600 transition-colors active:scale-95 shadow-md flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            Verifikasi Hasil Kategori Otomatis
+          </button>
         </div>
       )}
 
@@ -442,6 +514,67 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
               className="text-xs font-bold text-red-400 hover:text-red-600 px-4 py-2 rounded-lg transition-colors"
             >
               Berhenti Kategorisasi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ════════ LAYER 3 (L3): VERIFIKASI KATEGORI OTOMATIS ════════ */}
+      {mode === 'verify' && verifyQueue.length > 0 && verifyIdx < verifyQueue.length && (
+        <div>
+          <h3 className="text-lg font-bold mb-4 dark:text-gray-100">Verifikasi Kategori Otomatis</h3>
+
+          {/* Info aktivitas */}
+          <div className="mb-5 p-5 bg-indigo-50 rounded-2xl border border-indigo-100 text-center dark:bg-gray-900 dark:border-gray-700 flex flex-col justify-center items-center min-h-[100px]">
+            <p className="text-[10px] text-gray-500 mb-1.5 font-medium dark:text-gray-400">Aktivitas:</p>
+            <p className="font-black text-xl text-gray-800 dark:text-gray-100">{verifyQueue[verifyIdx].activity}</p>
+            <p className="text-[11px] text-gray-400 font-bold mt-2 uppercase tracking-wider bg-white dark:bg-gray-800 px-3 py-1 rounded-lg border border-indigo-100 dark:border-gray-600 inline-block shadow-sm">
+              {fmtRange(verifyQueue[verifyIdx])}
+            </p>
+            <p className="mt-3 text-[10px] text-gray-400 font-bold">Kategori Otomatis saat ini:</p>
+            <span className="mt-1 inline-block px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-black text-xs dark:bg-indigo-500/20 dark:text-indigo-300">
+              {verifyQueue[verifyIdx].category || 'Belum Kategori'}
+            </span>
+            <p className="text-[10px] text-gray-400 mt-3 font-bold">{verifyIdx + 1} dari {verifyQueue.length}</p>
+          </div>
+
+          <p className="mb-3 text-xs font-bold text-gray-500 dark:text-gray-400 text-center">Konfirmasi atau ubah kategori:</p>
+
+          {/* Tombol Kategori */}
+          <div className="flex flex-wrap justify-center gap-2 mb-4">
+            {allCategories.map((kategori) => (
+              <button
+                key={kategori.id}
+                onClick={() => handleVerifyGanti(kategori.nama)}
+                className="px-4 py-2.5 bg-gray-100 text-gray-700 font-bold text-sm rounded-xl hover:bg-indigo-500 hover:text-white transition-colors active:scale-95 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-indigo-500"
+              >
+                {kategori.nama}
+              </button>
+            ))}
+          </div>
+
+          {/* Tombol Benar */}
+          <button
+            onClick={handleVerifyBenar}
+            className="w-full px-4 py-3 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 transition-colors active:scale-95 shadow-md mb-3 flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+            Benar
+          </button>
+
+          {/* Tombol Bawah */}
+          <div className="flex flex-col gap-2 text-center border-t border-gray-100 dark:border-gray-700 pt-5 mt-2">
+            <button
+              onClick={handleVerifyLewati}
+              className="text-xs font-bold text-gray-500 hover:text-gray-800 px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-200 transition-colors active:scale-95 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+            >
+              Lewati Aktivitas Ini
+            </button>
+            <button
+              onClick={handleVerifyBerhenti}
+              className="text-xs font-bold text-red-400 hover:text-red-600 px-4 py-2 rounded-lg transition-colors"
+            >
+              Berhenti Verifikasi
             </button>
           </div>
         </div>
