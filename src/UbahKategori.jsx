@@ -230,45 +230,78 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
               ── Pengkategori Otomatis Aktivitas (Kelola Aturan Logika) ──
             </p>
 
-            {/* Header kolom */}
-            <div className="flex gap-2 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-              <div className="flex-1 min-w-0">Kata Kunci Logika (Case-Insensitive)</div>
-              <div className="w-32 flex-shrink-0">Kategori Target</div>
-              <div className="w-9 flex-shrink-0"></div>
-            </div>
-
-            {/* Baris filter */}
-            {filterRules.map((rule, idx) => (
-              <div key={idx} className="flex gap-2 mb-2 items-center">
-                <input
-                  type="text"
-                  value={rule.keyword}
-                  onChange={(e) => updateRule(idx, 'keyword', e.target.value)}
-                  placeholder='Contoh: ("Aktifitas" AND "makan") OR "olahraga"'
-                  className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 placeholder-gray-400"
-                />
-                <input
-                  list={`auto-cat-list-${idx}`}
-                  value={rule.category}
-                  onChange={(e) => updateRule(idx, 'category', e.target.value)}
-                  placeholder="Kategori"
-                  className="w-32 flex-shrink-0 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 placeholder-gray-400"
-                />
-                <datalist id={`auto-cat-list-${idx}`}>
-                  {allCategories.map(c => (
-                    <option key={c.id} value={c.nama} />
-                  ))}
-                </datalist>
-                <button
-                  onClick={() => removeRule(idx)}
-                  disabled={filterRules.length <= 1}
-                  className="flex-shrink-0 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed dark:hover:bg-red-900/20"
-                  title="Hapus baris ini"
+            {/* Daftar aturan: kontainer dengan batas tinggi & scroll */}
+            <div className="max-h-72 overflow-y-auto pr-1 space-y-3">
+              {filterRules.map((rule, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                </button>
-              </div>
-            ))}
+                  {/* Baris Atas: label aturan */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      Aturan {idx + 1}
+                    </span>
+                    {filterRules.length > 1 && (
+                      <button
+                        onClick={() => removeRule(idx)}
+                        className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        Hapus Aturan
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Baris Tengah: Kata Kunci Logika (lebar penuh) */}
+                  <label className="block mb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Kata Kunci Logika (Case-Insensitive)
+                  </label>
+                  <input
+                    type="text"
+                    value={rule.keyword}
+                    onChange={(e) => updateRule(idx, 'keyword', e.target.value)}
+                    placeholder='Contoh: ("Aktifitas" AND "makan") OR "olahraga"'
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 placeholder-gray-400"
+                  />
+
+                  {/* Baris Bawah: Kategori Target + Hapus (side-by-side) */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="flex-1 min-w-0 block">
+                      <span className="block mb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        Kategori Target
+                      </span>
+                      <div className="relative">
+                        <input
+                          list={`auto-cat-list-${idx}`}
+                          value={rule.category}
+                          onChange={(e) => updateRule(idx, 'category', e.target.value)}
+                          placeholder="Pilih kategori"
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 placeholder-gray-400 pr-8"
+                        />
+                        <svg className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      </div>
+                      <datalist id={`auto-cat-list-${idx}`}>
+                        {allCategories.map(c => (
+                          <option key={c.id} value={c.nama} />
+                        ))}
+                      </datalist>
+                    </label>
+
+                    {filterRules.length > 1 && (
+                      <button
+                        onClick={() => removeRule(idx)}
+                        disabled={filterRules.length <= 1}
+                        className="flex-shrink-0 p-2 mt-4 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed dark:hover:bg-red-900/20"
+                        title="Hapus baris ini"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
             {/* Tombol Tambah Baris */}
             <button
