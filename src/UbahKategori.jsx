@@ -88,6 +88,8 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
   // ── L2 States (Manual Wizard) ──
   const [manualQueue, setManualQueue] = useState([]);
   const [manualIdx, setManualIdx] = useState(0);
+  // Mode perekaman aturan otomatis ('⚡ Set Jadi Aturan') di L2
+  const [isRecordingRule, setIsRecordingRule] = useState(false);
 
   // Auto-dismiss notification
   useEffect(() => {
@@ -185,7 +187,19 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
   // ── L2 MANUAL WIZARD HANDLERS ──
   const handlePilihManual = (namaKategori) => {
     const act = manualQueue[manualIdx];
-    fungsiUbahKategori(act.id, namaKategori);
+
+    // Mode perekaman aturan aktif: simpan aturan otomatis + terapkan kategori
+    if (isRecordingRule) {
+      setIsRecordingRule(false);
+      handleSetJadiAturan(act, namaKategori);
+    } else {
+      fungsiUbahKategori(act.id, namaKategori);
+      advancManual();
+    }
+  };
+
+  // Maju ke aktivitas berikutnya di L2 (atau selesai jika habis)
+  const advancManual = () => {
     if (manualIdx < manualQueue.length - 1) {
       setManualIdx(prev => prev + 1);
     } else {
@@ -193,7 +207,44 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
     }
   };
 
+  // Toggle tombol '⚡ Set Jadi Aturan'
+  const handleToggleRecording = () => {
+    setIsRecordingRule(prev => !prev);
+  };
+
+  // Eksekusi latar belakang: buat aturan 'Nama' -> Kategori, terapkan kategori,
+  // tandai isAutoCategorized:true, lalu lanjut ke aktivitas berikutnya
+  const handleSetJadiAturan = (act, namaKategori) => {
+    const nom = namaKategori.trim().replace(/\s+/g, ' ').trim();
+    const keyword = `"${act.activity.trim()}"`;
+
+    // 1. Tambahkan aturan baru ke daftar filter L1 (hindari duplikat)
+    setAutoCategorizeRules(prev => {
+      const current = prev.length > 0 ? prev : [{ keyword: '', category: '' }];
+      const exists = current.some(r =>
+        r.keyword.trim() === keyword && r.category.trim().replace(/\s+/g, ' ').trim() === nom
+      );
+      if (exists) return current;
+      return [...current, { keyword, category: nom }];
+    });
+
+    // 2. Terapkan kategori ke aktivitas aktif + flag isAutoCategorized:true
+    fungsiBulkSetCategory([{ id: act.id, category: nom }]);
+    // Tambahkan kategori baru ke daftar lokal jika belum ada
+    setAllCategories(prev =>
+      prev.some(ac => ac.nama === nom) ? prev : [...prev, { id: nom, nama: nom }]
+    );
+
+    // 3. Tampilkan notifikasi ringkas
+    setNotifType('success');
+    setNotif(`⚡ Aturan "${act.activity}" → ${nom} disimpan & diterapkan`);
+
+    // 4. Lanjut ke aktivitas berikutnya
+    advancManual();
+  };
+
   const handleLewati = () => {
+    setIsRecordingRule(false);
     if (manualIdx < manualQueue.length - 1) {
       setManualIdx(prev => prev + 1);
     } else {
@@ -357,6 +408,25 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
                 {kategori.nama}
               </button>
             ))}
+          </div>
+
+          {/* Tombol '⚡ Set Jadi Aturan' (di bawah daftar kategori) */}
+          <div className="mb-5">
+            <button
+              onClick={handleToggleRecording}
+              className={`w-full px-4 py-3 rounded-2xl font-bold text-sm transition-colors active:scale-95 flex items-center justify-center gap-2 ${
+                isRecordingRule
+                  ? 'bg-orange-500 text-white shadow-lg ring-2 ring-orange-300 ring-offset-2 dark:ring-orange-600'
+                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'
+              }`}
+            >
+              <span className="text-base">⚡</span> Set Jadi Aturan
+            </button>
+            {isRecordingRule && (
+              <p className="mt-2 text-center text-[11px] font-bold text-orange-500 animate-pulse">
+                Mode aktif: pilih kategori untuk dijadikan aturan otomatis "{manualQueue[manualIdx].activity}"
+              </p>
+            )}
           </div>
 
           {/* Tombol Bawah */}
