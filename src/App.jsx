@@ -318,6 +318,35 @@ export default function App() {
     localStorage.setItem('offline_activities', JSON.stringify(parsedData));
   }, [parsedData]);
 
+  // MIGRASI OTOMATIS: Normalisasi kategori yang terlanjur memiliki spasi
+  // ('Belajar ' -> 'Belajar') agar aktivitas tidak terpecah jadi 2 kategori
+  useEffect(() => {
+    if (!parsedData || parsedData.length === 0) return;
+
+    // Deteksi aktivitas yang kategorinya berubah setelah normalisasi
+    const toMigrate = parsedData.filter(item => {
+      if (!item.category) return false;
+      const normalized = normalizeCategory(item.category);
+      return normalized !== item.category;
+    });
+    if (toMigrate.length === 0) return;
+
+    if (user && db) {
+      const batch = writeBatch(db);
+      toMigrate.forEach(act => {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', act.id);
+        batch.update(docRef, { category: normalizeCategory(act.category) });
+      });
+      batch.commit().catch(console.error);
+    } else {
+      setParsedData(prev =>
+        prev.map(item => item.category
+          ? { ...item, category: normalizeCategory(item.category) }
+          : item)
+      );
+    }
+  }, [parsedData, user, db, appId]);
+
   useEffect(() => {
     if (!auth) return;
 
@@ -1105,6 +1134,8 @@ export default function App() {
   const handleSaveEdit = async () => {
     try {
       let updatedItem = { ...editingItem };
+      // Normalisasi kategori (hapus spasi di depan/belakang)
+      updatedItem.category = normalizeCategory(updatedItem.category);
       
       if (updatedItem.segments && updatedItem.segments.length > 0) {
         // Kalkulasi ulang total menit dari semua segmen
@@ -1206,8 +1237,13 @@ export default function App() {
   // Alias agar kode di tab Home tidak error
   const sortedHomeData = filteredData; 
   // -----------------------------------------
+
+  // Helper: normalisasi kategori (hapus spasi depan/belakang + rapikan spasi ganda)
+  const normalizeCategory = (c) => (c || '').trim().replace(/\s+/g, ' ').trim();
+
+  // Daftar kategori unik dengan normalisasi spasi agar 'Belajar' dan 'Belajar ' dianggap sama
   const availableCategories = Array.from(new Set([
-    'Produktif', 'Non Produktif', ...parsedData.map(d => d.category).filter(Boolean)
+    'Produktif', 'Non Produktif', ...parsedData.map(d => normalizeCategory(d.category)).filter(Boolean)
   ]));
 
   const handlePointerDown = (id) => {
@@ -1266,16 +1302,17 @@ export default function App() {
 
   // FUNGSI BARU UNTUK MENYIMPAN 1 KATEGORI (Dipakai oleh UbahKategori.jsx)
   const handleUbahKategoriTunggal = async (aktivitasId, namaKategori) => {
+    const cat = normalizeCategory(namaKategori);
     if (user && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', aktivitasId);
-        await updateDoc(docRef, { category: namaKategori });
+        await updateDoc(docRef, { category: cat });
       } catch {
         showToast('Gagal update ke cloud.');
       }
     } else {
       setParsedData(prev => 
-        prev.map(item => item.id === aktivitasId ? { ...item, category: namaKategori } : item)
+        prev.map(item => item.id === aktivitasId ? { ...item, category: cat } : item)
       );
     }
   };
@@ -1286,7 +1323,7 @@ export default function App() {
         const batch = writeBatch(db);
         updates.forEach(({ id, category }) => {
           const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', id);
-          batch.update(docRef, { category, isAutoCategorized: true });
+          batch.update(docRef, { category: normalizeCategory(category), isAutoCategorized: true });
         });
         await batch.commit();
       } catch {
@@ -1296,7 +1333,7 @@ export default function App() {
       setParsedData(prev =>
         prev.map(item => {
           const update = updates.find(u => u.id === item.id);
-          return update ? { ...item, category: update.category, isAutoCategorized: true } : item;
+          return update ? { ...item, category: normalizeCategory(update.category), isAutoCategorized: true } : item;
         })
       );
     }
@@ -1311,8 +1348,8 @@ export default function App() {
     // 1. Ambil detail aktivitas yang dipilih
     const activitiesToMerge = parsedData.filter(item => selectedItems.includes(item.id));
 
-    // 2. Cek apakah kategori sama
-    const categories = new Set(activitiesToMerge.map(item => item.category || 'Belum Kategori'));
+    // 2. Cek apakah kategori sama (normalisasi spasi)
+    const categories = new Set(activitiesToMerge.map(item => normalizeCategory(item.category) || 'Belum Kategori'));
     if (categories.size > 1) {
       showToast('Peringatan: Aktivitas yang digabungkan memiliki kategori berbeda!');
       return;
@@ -1441,7 +1478,7 @@ export default function App() {
   // ------------------------------------------------
 
   const categoryStats = filteredData.reduce((acc, curr) => {
-    const cat = curr.category || 'Belum Kategori';
+    const cat = normalizeCategory(curr.category) || 'Belum Kategori';
     acc[cat] = (acc[cat] || 0) + curr.rawMinutes;
     return acc;
   }, {});
@@ -1956,7 +1993,7 @@ export default function App() {
                     
                     <div className="flex-1 overflow-y-auto pr-2 space-y-3">
                       {filteredData
-                        .filter(item => (item.category || 'Belum Kategori') === selectedCategoryStats)
+                        .filter(item => (normalizeCategory(item.category) || 'Belum Kategori') === selectedCategoryStats)
                         .map(item => (
                           <div key={item.id} className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                             <p className={`font-bold text-sm mb-1 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>{item.activity}</p>

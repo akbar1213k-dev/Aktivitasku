@@ -133,7 +133,7 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
       const matchedCategories = [];
       validRules.forEach(rule => {
         if (evaluateExpression(activity.activity, rule.keyword)) {
-          matchedCategories.push(rule.category.trim());
+          matchedCategories.push(rule.category.trim().replace(/\s+/g, ' ').trim());
         }
       });
 
@@ -157,7 +157,7 @@ export default function UbahKategori({ daftarAktivitas, daftarKategori, fungsiUb
 
     // Tambahkan kategori baru dari filter ke daftar lokal
     const newCats = validRules
-      .map(r => r.category.trim())
+      .map(r => r.category.trim().replace(/\s+/g, ' ').trim())
       .filter(c => c && !allCategories.some(ac => ac.nama === c));
     if (newCats.length > 0) {
       setAllCategories(prev => [...prev, ...newCats.map(c => ({ id: c, nama: c }))]);
