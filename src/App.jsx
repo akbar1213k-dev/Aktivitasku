@@ -947,12 +947,12 @@ export default function App() {
     }
 
     // --- FITUR RAW LOG: Append teks mentah ke riwayat ---
-    const rawTextToAppend = inputText; // Ambil inputText persis seperti dimasukkan pengguna
-    setRawLogs(prev => prev + (prev ? '\n' : '') + rawTextToAppend); // Gabungkan dengan pemisah baris baru
+    const newRawLogs = rawLogs + (rawLogs ? '\n' : '') + inputText; // Hitung nilai gabungan langsung dari state
+    setRawLogs(newRawLogs);
 
-    // Simpan ke localStorage
+    // Simpan ke localStorage (pakai nilai gabungan, bukan state yang belum ter-update)
     try {
-      localStorage.setItem('offline_raw_logs', rawLogs);
+      localStorage.setItem('offline_raw_logs', newRawLogs);
     } catch {
       console.warn('Gagal menyimpan rawLogs ke localStorage');
     }
@@ -960,7 +960,7 @@ export default function App() {
     // Sinkronisasi ke Firebase jika sedang Login
     if (user && db) {
       try {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs'), { rawLogs });
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs'), { rawLogs: newRawLogs });
       } catch(e) {
         console.warn('Gagal sinkronisasi rawLogs ke cloud.', e);
       }
