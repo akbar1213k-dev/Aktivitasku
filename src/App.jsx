@@ -645,12 +645,33 @@ export default function App() {
       return `${newH.toString().padStart(2, '0')}.${newM.toString().padStart(2, '0')}`;
     };
 
+    // --- HELPER: Konversi jam ke menit dalam sehari ---
+    const toMinOfDay = (timeStr) => {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    // --- HELPER: Tambah 1 hari ke tanggal (pertahankan format 2/3 bagian) ---
+    const addDays = (dateStr) => {
+      const parts = dateStr.split('/');
+      const hasYear = parts.length > 2;
+      const y = parseInt(parts[2], 10);
+      const fullYear = hasYear ? (y < 100 ? 2000 + y : y) : new Date().getFullYear();
+      const d = new Date(fullYear, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      d.setDate(d.getDate() + 1);
+      const dd = d.getDate().toString();
+      const mm = (d.getMonth() + 1).toString();
+      return hasYear ? `${dd}/${mm}/${parts[2]}` : `${dd}/${mm}`;
+    };
+
     const lines = inputText.split('\n');
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
     
     let activeSession = null;
     let lastTime = null;
+    let lastDate = null;
 
     lines.forEach((line) => {
       const match = line.match(regex);
@@ -676,6 +697,7 @@ export default function App() {
 
         let explicitStart = null;
         let explicitEnd = null;
+        let resumeFromLast = false; // Menandai sesi yang mulainya menyambung dari lastTime
 
         // 2. MEKANISME DURASI LANGSUNG (Makan .d29 atau . Shalat .d21)
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
@@ -689,6 +711,7 @@ export default function App() {
             explicitStart = subtractMinutes(time, durMins);
           } else if (message.startsWith('.')) {
             // Kasus B: ". Shalat .d21" -> Menyambung! Mulai dari waktu terakhir tercatat (lastTime), Selesai ditambah 21 menit
+            resumeFromLast = true;
             explicitStart = lastTime || time;
             explicitEnd = addMinutes(explicitStart, durMins);
           } else {
@@ -704,6 +727,7 @@ export default function App() {
           atMatch = message.match(/^\.at(\d*)\s+(.*)/i);
           if (atMatch) {
             const delayMins = parseInt(atMatch[1] || '0', 10);
+            resumeFromLast = true;
             explicitStart = lastTime ? addMinutes(lastTime, delayMins) : time;
             explicitEnd = time; // Jam akhir menggunakan jam pesan
             message = atMatch[2].trim();
@@ -732,29 +756,34 @@ export default function App() {
 
         // --- EKSEKUSI ---
         if (explicitStart && explicitEnd) {
+          const startDate = resumeFromLast ? (lastDate || date) : date;
+          const endDate = toMinOfDay(explicitEnd) < toMinOfDay(explicitStart) ? addDays(startDate) : startDate;
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
-              if (!lastSeg.end) lastSeg.end = explicitStart; 
-              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
+              if (!lastSeg.end) lastSeg.end = explicitStart;
+              activeSession.endDate = startDate; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
           }
-          let actName = activityFromDot || message; 
-          let newSess = { id: crypto.randomUUID(), date, endDate: date, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
+          let actName = activityFromDot || message;
+          let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
           newActivities.push(finalizeSession(newSess));
           activeSession = null;
-          lastTime = explicitEnd; 
+          lastDate = endDate;
+          lastTime = explicitEnd;
         }
         else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
           }
+          lastDate = date;
           lastTime = time;
         } 
         else if (isResumeMarker) {
           if (activeSession) {
               activeSession.segments.push({ start: time, end: null });
           }
+          lastDate = date;
           lastTime = time;
         } 
         else if (isEndMarker) {
@@ -765,6 +794,7 @@ export default function App() {
               newActivities.push(finalizeSession(activeSession));
               activeSession = null;
           }
+          lastDate = date;
           lastTime = time;
         } 
         else if (activityFromDot) {
@@ -775,8 +805,11 @@ export default function App() {
               newActivities.push(finalizeSession(activeSession));
           }
           if (lastTime) {
-              let newSess = { id: crypto.randomUUID(), date, endDate: date, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
+              const startDate = lastDate || date;
+              const endDate = toMinOfDay(time) < toMinOfDay(lastTime) ? addDays(startDate) : startDate;
+              let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
               newActivities.push(finalizeSession(newSess));
+              lastDate = endDate;
           }
           activeSession = null;
           lastTime = time;
@@ -790,6 +823,7 @@ export default function App() {
               newActivities.push(finalizeSession(activeSession));
           }
           activeSession = { id: crypto.randomUUID(), date, endDate: date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+          lastDate = date;
           lastTime = time;
         }
       }
