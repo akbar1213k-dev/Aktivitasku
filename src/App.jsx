@@ -63,6 +63,7 @@ export default function App() {
       return [];
     }
   });
+  const [isRawLogsFullScreenOpen, setIsRawLogsFullScreenOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   const showToast = (msg) => {
@@ -1235,6 +1236,32 @@ export default function App() {
     showToast('Berhasil diekspor ke CSV!');
   };
 
+  // Format nomor baris sumber menjadi "2-3" / "2, 4" / ""
+  const fmtSrcLines = (arr) => {
+    if (!Array.isArray(arr) || arr.length === 0) return '';
+    const nums = [...new Set(arr.map(n => Number(n)).filter(n => !isNaN(n) && n > 0))].sort((a, b) => a - b);
+    if (nums.length === 0) return '';
+    const parts = [];
+    let s = nums[0];
+    let prev = nums[0];
+    for (let i = 1; i <= nums.length; i++) {
+      if (i === nums.length || nums[i] !== prev + 1) {
+        parts.push(s === prev ? `${s}` : `${s}-${prev}`);
+        s = nums[i];
+      }
+      prev = nums[i];
+    }
+    return `bersumber baris ${parts.join(', ')}`;
+  };
+
+  // Rentang waktu sebuah aktivitas untuk panel catatan parse
+  const formatRange = (s) => {
+    if (!s) return '';
+    return (s.endDate && s.endDate !== s.date)
+      ? `${s.date} ${s.start} - ${s.endDate} ${s.end}`
+      : `${s.date} ${s.start} - ${s.end}`;
+  };
+
   // Fungsi Unduh Teks Mentah (.txt)
   const handleDownloadRawLogs = () => {
     // Format stempel waktu: DDMMYY-HHMM
@@ -1251,23 +1278,6 @@ export default function App() {
 
     // Jika tersedia jejak parse (data baru), tampilkan laporan beranotasi
     if (rawLogsDetail && rawLogsDetail.length > 0) {
-      const fmtSrcLines = (arr) => {
-        if (!Array.isArray(arr) || arr.length === 0) return '';
-        const nums = [...new Set(arr.map(n => Number(n)).filter(n => !isNaN(n) && n > 0))].sort((a, b) => a - b);
-        if (nums.length === 0) return '';
-        const parts = [];
-        let s = nums[0];
-        let prev = nums[0];
-        for (let i = 1; i <= nums.length; i++) {
-          if (i === nums.length || nums[i] !== prev + 1) {
-            parts.push(s === prev ? `${s}` : `${s}-${prev}`);
-            s = nums[i];
-          }
-          prev = nums[i];
-        }
-        return `bersumber baris ${parts.join(', ')}`;
-      };
-
       let runningLine = 0;
       let totalActs = 0;
       rawLogsDetail.forEach(b => { totalActs += (b.summary ? b.summary.length : 0); });
@@ -1301,9 +1311,7 @@ export default function App() {
         rawLogsDetail.forEach((batch) => {
           (batch.summary || []).forEach((s) => {
             const name = s.name || '-';
-            const range = (s.endDate && s.endDate !== s.date)
-              ? `${s.date} ${s.start} - ${s.endDate} ${s.end}`
-              : `${s.date} ${s.start} - ${s.end}`;
+            const range = formatRange(s);
             const srcFull = fmtSrcLines(s.sourceLines);
             out.push(`${idx}. ${name}  |  ${range}${srcFull ? `   (${srcFull})` : ''}`);
             idx += 1;
@@ -2595,12 +2603,12 @@ export default function App() {
               </div>
               {/* --- BATAS KODE CATATAN APLIKASI --- */}
 
-                {/* Tombol Unduh Teks Mentah (.txt) */}
+                {/* Tombol Lihat Teks Mentah */}
                 <button
-                  onClick={handleDownloadRawLogs}
+                  onClick={() => setIsRawLogsFullScreenOpen(true)}
                   className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-2xl font-bold transition-colors"
                 >
-                  Unduh Teks Mentah (.txt)
+                  Lihat Teks Mentah
                 </button>
               
             </div>
@@ -3226,6 +3234,87 @@ export default function App() {
           </button>
 
         </div>
+
+        {/* --- MODAL LAYAR PENUH: TEKS MENTAH & CATATAN PARSE --- */}
+        {isRawLogsFullScreenOpen && (
+          <div className="fixed inset-0 w-screen h-screen z-50 bg-slate-900 p-6 flex flex-col gap-4 overflow-y-auto">
+            {/* Top Header Bar */}
+            <div className="flex items-center justify-between gap-3 shrink-0">
+              <button
+                onClick={() => setIsRawLogsFullScreenOpen(false)}
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors active:scale-95"
+              >
+                <span>⬅️</span> Kembali
+              </button>
+              <h1 className="text-white font-extrabold text-lg text-center truncate">Teks Mentah Aktivitas</h1>
+              <button
+                onClick={handleDownloadRawLogs}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors active:scale-95 shrink-0"
+              >
+                <span>⬇️</span> Unduh Log (.txt)
+              </button>
+            </div>
+
+            {/* Panel 1: Teks Mentah */}
+            <div className="bg-slate-950 text-emerald-400 font-mono text-xs p-4 rounded-xl whitespace-pre-wrap overflow-x-auto leading-relaxed border border-slate-800 min-h-[30vh] max-h-[55vh] overflow-y-auto">
+              {rawLogsDetail && rawLogsDetail.length > 0
+                ? rawLogsDetail.map(b => (b.raw || '').trim()).filter(Boolean).join('\n') || '(belum ada teks mentah)'
+                : rawLogs || '(belum ada teks mentah)'}
+            </div>
+
+            {/* Panel 2: Catatan Parse */}
+            <div className="space-y-4">
+              {(rawLogsDetail && rawLogsDetail.length > 0) ? (
+                rawLogsDetail.map((batch, bi) => {
+                  const linesCount = Array.isArray(batch.lines) ? batch.lines.length : 0;
+                  const actsCount = Array.isArray(batch.summary) ? batch.summary.length : 0;
+                  const ignoredCount = Array.isArray(batch.lines)
+                    ? batch.lines.filter(ln => (ln.notes || []).some(n => /Diabaikan|Dihiraukan|Tidak dikenali/.test(n))).length
+                    : 0;
+                  return (
+                    <div key={bi} className="bg-slate-800 text-slate-100 p-4 rounded-lg">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="bg-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-full">Kelompok #{bi + 1}</span>
+                        <span className="bg-indigo-600/20 text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">{linesCount} baris</span>
+                        <span className="bg-emerald-600/20 text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-full">{actsCount} aktivitas</span>
+                        {ignoredCount > 0 && (
+                          <span className="bg-amber-600/20 text-amber-300 text-xs font-bold px-2.5 py-1 rounded-full">{ignoredCount} diabaikan</span>
+                        )}
+                        <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${actsCount > 0 ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
+                          {actsCount > 0 ? '✓ Parse OK' : '• Tanpa Hasil'}
+                        </span>
+                      </div>
+                      <ul className="space-y-1.5 text-sm">
+                        {(batch.summary || []).map((s, si) => {
+                          const name = s.name || '-';
+                          const range = formatRange(s);
+                          const srcFull = fmtSrcLines(s.sourceLines);
+                          return (
+                            <li key={si} className="flex items-start gap-2">
+                              <span className="text-emerald-400 mt-0.5 shrink-0">•</span>
+                              <span>
+                                <span className="font-bold text-white">{name}</span>
+                                <span className="text-slate-300"> — {range}</span>
+                                {srcFull && <span className="text-slate-400"> ({srcFull})</span>}
+                              </span>
+                            </li>
+                          );
+                        })}
+                        {actsCount === 0 && <li className="text-slate-400 text-sm">(tidak ada aktivitas yang dihasilkan dari kelompok ini)</li>}
+                      </ul>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-slate-800 text-slate-100 p-4 rounded-lg">
+                  <span className="inline-block bg-amber-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-full mb-2">Belum Ada Jejak Parse</span>
+                  <p className="text-sm text-slate-300">Salin ulang teks riwayat lewat tombol &quot;+&quot; agar catatan parse per baris (unduh beranotasi) mulai terekam.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div> 
     </div> 
   );
