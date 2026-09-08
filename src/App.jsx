@@ -55,6 +55,14 @@ export default function App() {
       return '';
     }
   });
+  const [rawLogsDetail, setRawLogsDetail] = useState(() => {
+    try {
+      const saved = localStorage.getItem('offline_raw_logs_detail');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [toast, setToast] = useState('');
 
   const showToast = (msg) => {
@@ -277,6 +285,8 @@ export default function App() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setRawLogs(docSnap.data().rawLogs || '');
+        const detail = docSnap.data().rawLogsDetail;
+        if (Array.isArray(detail)) setRawLogsDetail(detail);
       }
     }, (error) => {
       console.error("Firestore rawLogs error:", error);
@@ -669,17 +679,40 @@ export default function App() {
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
     
+    // --- JEJAK PARSE UNTUK UNDUH TEKS MENTAH BERANOTASI ---
+    const traceLines = []; // indeks = nomor baris (0-based), isi { raw, notes: [] }
+    const traceSummary = []; // aktivitas akhir: { name, date, start, end, endDate, sourceLines }
+    let lastReportedLineIdx = -1; // baris terakhir yang meng-set lastTime (untuk atribusi .at / . Nama)
+    // -------------------------------------------------------
+
     let activeSession = null;
     let lastTime = null;
     let lastDate = null;
 
-    lines.forEach((line) => {
+    // Helper jejak: tutup sesi sambil menulis catatan pembuka & penutupnya
+    const closeTracedSession = (sess, endTime, endDateLabel, closeLineIdx) => {
+      if (!sess) return;
+      const startTime = sess.segments[0].start;
+      if (sess._srcLine != null && traceLines[sess._srcLine]) {
+        const detail = sess._openDetail ? ` (${sess._openDetail})` : '';
+        const closedBy = sess._srcLine !== closeLineIdx ? ` (ditutup baris ${closeLineIdx + 1})` : '';
+        if (!traceLines[sess._srcLine].notes.some(n => n.startsWith(`Membuka sesi "${sess.message}"`))) {
+          traceLines[sess._srcLine].notes.push(`Membuka sesi "${sess.message}", mulai ${sess.date} ${startTime}${detail}${closedBy}`);
+        }
+      }
+      sess._srcLines.push(closeLineIdx + 1);
+      traceLines[closeLineIdx].notes.push(`Menandai selesai sesi "${sess.message}" => ${sess.message} | ${sess.date} ${startTime} - ${endDateLabel} ${endTime}`);
+    };
+
+    lines.forEach((line, lineIdx) => {
+      traceLines[lineIdx] = { raw: line, notes: [] };
       const match = line.match(regex);
       if (match) {
         let message = match[4].trim();
 
         // 0. MEKANISME KOMENTAR (.h) - Baris ini diabaikan sepenuhnya
         if (message.toLowerCase().startsWith('.h ') || message.toLowerCase() === '.h') {
+          traceLines[lineIdx].notes.push('Dihiraukan (komentar .h)');
           return;
         }
 
@@ -697,6 +730,7 @@ export default function App() {
 
         // 0b. MEKANISME KOMENTAR (.h) untuk baris berformat "[..] Me: 09.15 .h teks"
         if (message.toLowerCase().startsWith('.h ') || message.toLowerCase() === '.h') {
+          traceLines[lineIdx].notes.push('Dihiraukan (komentar .h)');
           return;
         }
 
@@ -772,12 +806,18 @@ export default function App() {
               if (!lastSeg.end) lastSeg.end = explicitStart;
               activeSession.endDate = startDate; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, explicitStart, startDate, lineIdx);
           }
           let actName = activityFromDot || message;
           let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: actName, segments: [{start: explicitStart, end: explicitEnd}], createdAt: Date.now() + newActivities.length };
           newActivities.push(finalizeSession(newSess));
+          newSess._srcLine = lineIdx;
+          newSess._srcLines = [lineIdx + 1];
+          const startNoteTail = resumeFromLast && lastReportedLineIdx >= 0 && lastReportedLineIdx !== lineIdx ? ` (mulai dari baris ${lastReportedLineIdx + 1})` : '';
+          traceLines[lineIdx].notes.push(`Menghasilkan aktivitas "${actName}" => ${actName} | ${startDate} ${explicitStart} - ${endDate} ${explicitEnd}${startNoteTail}`);
           activeSession = null;
           lastDate = endDate;
+          lastReportedLineIdx = lineIdx;
           lastTime = explicitEnd;
         }
         else if (isPauseMarker) {
@@ -785,14 +825,18 @@ export default function App() {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = time;
           }
+          traceLines[lineIdx].notes.push('Menjeda sesi aktif (akan dilanjutkan)');
           lastDate = date;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         } 
         else if (isResumeMarker) {
           if (activeSession) {
               activeSession.segments.push({ start: time, end: null });
           }
+          traceLines[lineIdx].notes.push('Melanjutkan kembali sesi aktif');
           lastDate = date;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         } 
         else if (isEndMarker) {
@@ -801,9 +845,13 @@ export default function App() {
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, time, date, lineIdx);
               activeSession = null;
+          } else {
+              traceLines[lineIdx].notes.push('Menandai selesai, tidak ada sesi aktif');
           }
           lastDate = date;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         } 
         else if (activityFromDot) {
@@ -812,15 +860,23 @@ export default function App() {
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, time, date, lineIdx);
           }
           if (lastTime) {
               const startDate = lastDate || date;
               const endDate = toMinOfDay(time) < toMinOfDay(lastTime) ? addDays(startDate) : startDate;
               let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
               newActivities.push(finalizeSession(newSess));
+              newSess._srcLine = lineIdx;
+              newSess._srcLines = [lineIdx + 1];
+              const srcTail = lastReportedLineIdx >= 0 && lastReportedLineIdx !== lineIdx ? ` (mulai dari baris ${lastReportedLineIdx + 1})` : '';
+              traceLines[lineIdx].notes.push(`Menghasilkan aktivitas "${activityFromDot}" => ${activityFromDot} | ${startDate} ${lastTime} - ${endDate} ${time}${srcTail}`);
               lastDate = endDate;
+          } else {
+              traceLines[lineIdx].notes.push('Diabaikan (tidak ada waktu aktivitas sebelumnya)');
           }
           activeSession = null;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         } 
         else if (isAtOpen) {
@@ -830,10 +886,18 @@ export default function App() {
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, time, date, lineIdx);
           }
           const actStart = lastTime ? addMinutes(lastTime, atDelay) : time; // Mulai dari waktu laporan baris sebelumnya
           activeSession = { id: crypto.randomUUID(), date: lastDate || date, endDate: lastDate || date, message, segments: [{start: actStart, end: null}], createdAt: Date.now() + newActivities.length };
+          activeSession._srcLine = lineIdx;
+          activeSession._srcLines = [lineIdx + 1];
+          const openDetailParts = [];
+          if (atDelay > 0) openDetailParts.push(`+${atDelay} menit`);
+          if (lastReportedLineIdx >= 0 && lastReportedLineIdx !== lineIdx) openDetailParts.push(`bersambung baris ${lastReportedLineIdx + 1}`);
+          if (openDetailParts.length > 0) activeSession._openDetail = openDetailParts.join(', ');
           lastDate = date;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         } 
         else {
@@ -843,11 +907,17 @@ export default function App() {
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, time, date, lineIdx);
           }
           activeSession = { id: crypto.randomUUID(), date, endDate: date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+          activeSession._srcLine = lineIdx;
+          activeSession._srcLines = [lineIdx + 1];
           lastDate = date;
+          lastReportedLineIdx = lineIdx;
           lastTime = time;
         }
+      } else {
+        traceLines[lineIdx].notes.push('Tidak dikenali (bukan format aktivitas)');
       }
     });
 
@@ -857,6 +927,8 @@ export default function App() {
        let lastSeg = activeSession.segments[activeSession.segments.length - 1];
        if (!lastSeg.end) lastSeg.end = lastSeg.start; 
        newActivities.push(finalizeSession(activeSession));
+       const lastIdx = lastReportedLineIdx >= 0 ? lastReportedLineIdx : (traceLines.length - 1);
+       closeTracedSession(activeSession, lastSeg.start, activeSession.date, lastIdx);
     }
 
     // --- FITUR BARU: AUTO-MERGE AKTIVITAS BERNAMA SAMA ---
@@ -937,6 +1009,18 @@ export default function App() {
          rawMinutes: totalMinutes,
       };
 
+      // Gabungkan nomor baris sumber dari semua sesi yang digabung (untuk jejak unduh)
+      const mergedSrcLines = [];
+      actsToMerge.forEach(act => {
+         if (Array.isArray(act._srcLines)) {
+            act._srcLines.forEach(n => {
+               const v = Number(n);
+               if (!isNaN(v) && v > 0 && !mergedSrcLines.includes(v)) mergedSrcLines.push(v);
+            });
+         }
+      });
+      updatedBaseActivity._srcLines = mergedSrcLines;
+
       // Format ulang teks jam totalnya
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
@@ -954,6 +1038,20 @@ export default function App() {
     });
 
     const allActivitiesToCheck = [...finalNewActivities, ...activitiesToUpdate];
+
+    // --- BANGUN RINGKASAN AKTIVITAS AKHIR (setelah auto-merge) UNTUK JEJAK UNDUH ---
+    allActivitiesToCheck.forEach(act => {
+      const firstSeg = act.segments && act.segments.length ? act.segments[0] : { start: act.startTime };
+      const lastSeg = act.segments && act.segments.length ? act.segments[act.segments.length - 1] : { end: act.endTime };
+      traceSummary.push({
+        name: act.activity || act.message || '',
+        date: act.date,
+        start: firstSeg.start,
+        end: lastSeg.end || firstSeg.start,
+        endDate: act.endDate,
+        sourceLines: act._srcLines || []
+      });
+    });
 
     if (allActivitiesToCheck.length > 0) {
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
@@ -1013,10 +1111,20 @@ export default function App() {
       console.warn('Gagal menyimpan rawLogs ke localStorage');
     }
 
+    // --- FITUR RAW LOG DETAIL: simpan jejak parse per baris + ringkasan ---
+    const newBatch = { raw: inputText, lines: traceLines.filter(Boolean), summary: traceSummary };
+    const newRawLogsDetail = [...(rawLogsDetail || []), newBatch];
+    setRawLogsDetail(newRawLogsDetail);
+    try {
+      localStorage.setItem('offline_raw_logs_detail', JSON.stringify(newRawLogsDetail));
+    } catch {
+      console.warn('Gagal menyimpan rawLogsDetail ke localStorage');
+    }
+
     // Sinkronisasi ke Firebase jika sedang Login
     if (user && db) {
       try {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs'), { rawLogs: newRawLogs });
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'rawLogs'), { rawLogs: newRawLogs, rawLogsDetail: newRawLogsDetail });
       } catch(e) {
         console.warn('Gagal sinkronisasi rawLogs ke cloud.', e);
       }
@@ -1139,8 +1247,74 @@ export default function App() {
     const timestamp = `${day}${month}${year}-${hour}${minute}`;
     const filename = `riwayat_aktivitasku_${timestamp}.txt`;
 
+    let fileContent = rawLogs;
+
+    // Jika tersedia jejak parse (data baru), tampilkan laporan beranotasi
+    if (rawLogsDetail && rawLogsDetail.length > 0) {
+      const fmtSrcLines = (arr) => {
+        if (!Array.isArray(arr) || arr.length === 0) return '';
+        const nums = [...new Set(arr.map(n => Number(n)).filter(n => !isNaN(n) && n > 0))].sort((a, b) => a - b);
+        if (nums.length === 0) return '';
+        const parts = [];
+        let s = nums[0];
+        let prev = nums[0];
+        for (let i = 1; i <= nums.length; i++) {
+          if (i === nums.length || nums[i] !== prev + 1) {
+            parts.push(s === prev ? `${s}` : `${s}-${prev}`);
+            s = nums[i];
+          }
+          prev = nums[i];
+        }
+        return `bersumber baris ${parts.join(', ')}`;
+      };
+
+      let runningLine = 0;
+      let totalActs = 0;
+      rawLogsDetail.forEach(b => { totalActs += (b.summary ? b.summary.length : 0); });
+
+      const out = [];
+      out.push('==============================================================');
+      out.push('AKTIVITASKU - RIWAYAT INPUT & HASIL PARSE');
+      out.push(`Dibuat: ${day}/${month}/${now.getFullYear()} ${hour}:${minute}  |  Total aktivitas dihasilkan: ${totalActs}`);
+      out.push('==============================================================');
+      out.push('');
+      out.push('BAGIAN 1: INPUT PER BARIS + HASILNYA');
+      out.push('--------------------------------------');
+      rawLogsDetail.forEach((batch, bi) => {
+        out.push('');
+        out.push(`~ Kelompok input #${bi + 1} ~`);
+        out.push(`  ${String(batch.raw || '').split('\n')[0] || ''}${String(batch.raw || '').split('\n').length > 1 ? ' ...' : ''}`);
+        (batch.lines || []).forEach((ln) => {
+          runningLine += 1;
+          out.push(`Baris ${runningLine}: ${(ln.raw || '').trim()}`);
+          const notes = ln.notes && ln.notes.length ? ln.notes : ['(tidak ada hasil)'];
+          notes.forEach(note => out.push(`               -> ${note}`));
+        });
+      });
+      out.push('');
+      out.push('BAGIAN 2: DAFTAR AKTIVITAS DIHASILKAN');
+      out.push('--------------------------------------');
+      if (totalActs === 0) {
+        out.push('(tidak ada aktivitas yang dihasilkan)');
+      } else {
+        let idx = 1;
+        rawLogsDetail.forEach((batch) => {
+          (batch.summary || []).forEach((s) => {
+            const name = s.name || '-';
+            const range = (s.endDate && s.endDate !== s.date)
+              ? `${s.date} ${s.start} - ${s.endDate} ${s.end}`
+              : `${s.date} ${s.start} - ${s.end}`;
+            const srcFull = fmtSrcLines(s.sourceLines);
+            out.push(`${idx}. ${name}  |  ${range}${srcFull ? `   (${srcFull})` : ''}`);
+            idx += 1;
+          });
+        });
+      }
+      fileContent = out.join('\n');
+    }
+
     // Buat Blob dengan tipe text/plain;charset=utf-8
-    const blob = new Blob([rawLogs], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
 
     // Buat link download
     const url = URL.createObjectURL(blob);
