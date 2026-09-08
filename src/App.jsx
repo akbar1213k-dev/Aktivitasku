@@ -64,7 +64,7 @@ export default function App() {
 
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi 29m, selesai 16.13)\n\n8. Sambung Akhir (.at / .at[angka] Nama):\n[12/10 14.08] : .at7 Belajar\n(Mulai 7m setelah aktivitas sblmnya selesai, berakhir 14.08)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi 29m, selesai 16.13)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -695,6 +695,11 @@ export default function App() {
           hasExplicitTime = true;
         }
 
+        // 0b. MEKANISME KOMENTAR (.h) untuk baris berformat "[..] Me: 09.15 .h teks"
+        if (message.toLowerCase().startsWith('.h ') || message.toLowerCase() === '.h') {
+          return;
+        }
+
         let explicitStart = null;
         let explicitEnd = null;
         let resumeFromLast = false; // Menandai sesi yang mulainya menyambung dari lastTime
@@ -722,14 +727,18 @@ export default function App() {
         }
 
         // 3. MEKANISME SAMBUNG AKTIVITAS TERAKHIR (.at atau .at7)
+        // .at Nama = buka sesi mulai dari waktu laporan baris sebelumnya.
+        // Sesi ini DITUTUP oleh baris berikutnya (yang bukan .h) di jam
+        // laporan baris itu: jam dalam pesan diprioritaskan, jika tidak ada
+        // maka jam dalam kurung yang dipakai.
         let atMatch = null;
+        let atDelay = 0;
+        let isAtOpen = false;
         if (!durMatch && !hasExplicitTime) {
           atMatch = message.match(/^\.at(\d*)\s+(.*)/i);
           if (atMatch) {
-            const delayMins = parseInt(atMatch[1] || '0', 10);
-            resumeFromLast = true;
-            explicitStart = lastTime ? addMinutes(lastTime, delayMins) : time;
-            explicitEnd = time; // Jam akhir menggunakan jam pesan
+            atDelay = parseInt(atMatch[1] || '0', 10);
+            isAtOpen = true;
             message = atMatch[2].trim();
           }
         }
@@ -812,6 +821,19 @@ export default function App() {
               lastDate = endDate;
           }
           activeSession = null;
+          lastTime = time;
+        } 
+        else if (isAtOpen) {
+          // SISI .at: tutup sesi sebelumnya, lalu buka sesi baru
+          if (activeSession) {
+              let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = time;
+              activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
+              newActivities.push(finalizeSession(activeSession));
+          }
+          const actStart = lastTime ? addMinutes(lastTime, atDelay) : time; // Mulai dari waktu laporan baris sebelumnya
+          activeSession = { id: crypto.randomUUID(), date: lastDate || date, endDate: lastDate || date, message, segments: [{start: actStart, end: null}], createdAt: Date.now() + newActivities.length };
+          lastDate = date;
           lastTime = time;
         } 
         else {
@@ -2969,11 +2991,12 @@ export default function App() {
 
                 {/* Aturan 8 (BARU) */}
                 <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                  <p className="font-extrabold text-orange-500 mb-1">8. Sambung Akhir (.at)</p>
-                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.at) atau (.at[angka]) untuk memulai aktivitas di jam berakhirnya aktivitas sebelumnya (ditambah angka menit).</p>
+                  <p className="font-extrabold text-orange-500 mb-1">8. Sambung (.at)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.at) atau (.at[angka]) untuk memulai aktivitas di jam laporan baris sebelumnya (jam dalam pesan jika ada, jika tidak jam bracket). Sesi diakhiri di jam laporan baris berikutnya; baris (.h) dihiraukan.</p>
                   <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
                     [10/7 14.08] : .at7 Belajar<br/>
-                    <span className="text-gray-500 italic">// Mulai 7 menit setelah aktivitas sebelumnya, selesai di 14.08</span>
+                    [10/7 15.00] : 14.30 .<br/>
+                    <span className="text-gray-500 italic">// Belajar mulai 7 menit setelah baris sebelum, berakhir 14.30</span>
                   </code>
                 </div>
 
