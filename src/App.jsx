@@ -78,7 +78,7 @@ export default function App() {
 
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi (.d[angka]) - Titik Akhir (mundur):\n[12/10 16.13] : Makan .d29\n(Durasi 29m mundur: mulai 15.44, selesai 16.13)\n[12/10 17.00] : . Shalat .d21\n(Mulai 16.39, selesai 17.00)\n\n7b. Durasi (.d[angka]) - Titik Awal (maju, pakai .at):\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : .at Olahraga .d20\n(Mulai di 16.00 waktu baris sblmnya, durasi maju 20m: selesai 16.20)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi (.d[angka]) - Titik Akhir (mundur):\n[12/10 16.13] : Makan .d29\n(Durasi 29m mundur: mulai 15.44, selesai 16.13)\n[12/10 17.00] : . Shalat .d21\n(Mulai 16.39, selesai 17.00)\n\n7b. Durasi (.d[angka]) - Titik Awal (maju, pakai .at):\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : .at Olahraga .d20\n(Mulai di 16.00 waktu baris sblmnya, durasi maju 20m: selesai 16.20)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)\n\n10. Durasi Maju Waktu Berjalan (.atN . / .N . Nama):\n.atN . = tutup sesi aktif, tambah N menit dari waktu berjalan (akhir aktivitas sebelumnya)\n.N . Nama = aktivitas Nama berdurasi N menit dari waktu berjalan\n[12/10 19.19] : .at Shalat isya\n[12/10 19.43] : .at5 .\n(Shalat isya mulai 19.19, berakhir 19.24)\n[12/10 19.51] : .9 . Makan\n(Makan mulai 19.24, berakhir 19.33)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -744,6 +744,14 @@ export default function App() {
         let explicitEnd = null;
         let resumeFromLast = false; // Menandai sesi yang mulainya menyambung dari lastTime
 
+        // --- MEKANISME BARU: DURASI MAJU DARI WAKTU BERJALAN (lastTime) ---
+        // .atN .     = tutup sesi aktif, tambah N menit dari waktu berjalan
+        // .N .       = tutup sesi aktif, tambah N menit dari waktu berjalan
+        // .N . Nama  = aktivitas baru [lastTime, lastTime + N]
+        let forwardMode = false;
+        let forwardMins = 0;
+        let forwardName = null; // null = menutup sesi aktif, string = nama aktivitas baru
+
         // 2. MEKANISME DURASI LANGSUNG (.dN)
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
         if (durMatch) {
@@ -780,8 +788,14 @@ export default function App() {
           atMatch = message.match(/^\.at(\d*)\s+(.*)/i);
           if (atMatch) {
             atDelay = parseInt(atMatch[1] || '0', 10);
-            isAtOpen = true;
             message = atMatch[2].trim();
+            if (message === '.' || message === '') {
+              // .atN . / .atN => tutup sesi aktif, tambah N menit dari waktu berjalan
+              forwardMode = true;
+              forwardMins = atDelay || 0;
+            } else {
+              isAtOpen = true;
+            }
           }
         }
 
@@ -790,9 +804,18 @@ export default function App() {
         if (!durMatch && !atMatch) { // Tidak dijalankan jika format .d atau .at sudah dipakai
           shiftMatch = message.match(/^\.(\d+)\s+(.*)/);
           if (shiftMatch) {
-            const shiftMins = parseInt(shiftMatch[1], 10);
-            time = subtractMinutes(time, shiftMins); 
-            message = shiftMatch[2].trim();
+            const trailing = shiftMatch[2].trim();
+            const numMins = parseInt(shiftMatch[1], 10);
+            // .N . | .N . Nama => durasi MAJU dari waktu berjalan (lastTime)
+            if (trailing === '.' || /^\.\s*\S+/.test(trailing)) {
+              forwardMode = true;
+              forwardMins = numMins;
+              forwardName = trailing === '.' ? null : trailing.replace(/^\.\s*/, '').trim();
+              message = trailing;
+            } else {
+              time = subtractMinutes(time, numMins);
+              message = trailing;
+            }
           }
         }
 
@@ -827,6 +850,54 @@ export default function App() {
           lastDate = endDate;
           lastReportedLineIdx = lineIdx;
           lastTime = explicitEnd;
+        }
+        else if (forwardMode) {
+          // --- MEKANISME BARU: DURASI MAJU DARI WAKTU BERJALAN (lastTime) ---
+          if (forwardName) {
+            // .N . Nama => aktivitas baru [lastTime, lastTime + N]
+            const fStart = lastTime || time;
+            const fEnd = addMinutes(fStart, forwardMins);
+            if (activeSession) {
+              const closeSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!closeSeg.end) closeSeg.end = fStart;
+              activeSession.endDate = lastDate || date;
+              newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, fStart, lastDate || date, lineIdx);
+              activeSession = null;
+            }
+            const startDate = lastDate || date;
+            const endDate = toMinOfDay(fEnd) < toMinOfDay(fStart) ? addDays(startDate) : startDate;
+            let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: forwardName, segments: [{start: fStart, end: fEnd}], createdAt: Date.now() + newActivities.length };
+            newActivities.push(finalizeSession(newSess));
+            newSess._srcLine = lineIdx;
+            newSess._srcLines = [lineIdx + 1];
+            traceLines[lineIdx].notes.push(`Menghasilkan aktivitas "${forwardName}" => ${forwardName} | ${startDate} ${fStart} - ${endDate} ${fEnd} (durasi maju ${forwardMins} menit dari waktu berjalan)`);
+            lastDate = endDate;
+            lastTime = fEnd;
+          } else {
+            // .atN . / .N . => tutup sesi aktif di (waktu mulai sesi + N)
+            if (activeSession) {
+              const fStart = activeSession.segments[0].start;
+              const fEnd = addMinutes(fStart, forwardMins);
+              activeSession.endDate = activeSession.date;
+              const lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!lastSeg.end) lastSeg.end = fEnd;
+              newActivities.push(finalizeSession(activeSession));
+              closeTracedSession(activeSession, fEnd, activeSession.date, lineIdx);
+              activeSession = null;
+              lastDate = date;
+              lastTime = fEnd;
+              traceLines[lineIdx].notes.push(`Sesi ditutup maju: tambah ${forwardMins} menit dari waktu berjalan => ${fEnd}`);
+            } else {
+              if (lastTime) {
+                lastTime = addMinutes(lastTime, forwardMins);
+                traceLines[lineIdx].notes.push(`Memajukan waktu berjalan +${forwardMins} menit => ${lastTime}`);
+              } else {
+                traceLines[lineIdx].notes.push('Tidak ada sesi aktif maupun waktu berjalan untuk digeser maju');
+              }
+            }
+          }
+          lastReportedLineIdx = lineIdx;
         }
         else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
@@ -3346,6 +3417,19 @@ export default function App() {
                   <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
                     [10/7 15.00] : .h Istirahat dlu cape<br/>
                     <span className="text-gray-500 italic">// Sistem tidak akan merekam ini</span>
+                  </code>
+                </div>
+
+                {/* Aturan 10 (BARU) */}
+                <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <p className="font-extrabold text-orange-500 mb-1">10. Durasi Maju Waktu Berjalan (.atN . / .N . Nama)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik <b>.atN .</b> untuk menutup sesi aktif dengan tambahan N menit, atau <b>.N . Nama</b> untuk membuat aktivitas Nama berdurasi N menit — keduanya dihitung MAJU dari <b>waktu berjalan</b> (selesainya aktivitas sebelumnya).</p>
+                  <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
+                    [9/9 19.19] : .at Shalat isya<br/>
+                    [9/9 19.43] : .at5 .<br/>
+                    <span className="text-gray-500 italic">// Shalat isya mulai 19.19, tutup maju 5 menit =&gt; selesai 19.24</span><br/>
+                    [9/9 19.51] : .9 . Makan<br/>
+                    <span className="text-gray-500 italic">// Makan mulai 19.24, durasi maju 9 menit =&gt; selesai 19.33</span>
                   </code>
                 </div>
 
