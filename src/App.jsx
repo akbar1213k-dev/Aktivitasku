@@ -73,7 +73,7 @@ export default function App() {
 
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi Instan (Nama .d[angka]):\n[12/10 16.13] : Makan .d29\n(Durasi 29m, selesai 16.13)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi (.d[angka]) - Titik Akhir (mundur):\n[12/10 16.13] : Makan .d29\n(Durasi 29m mundur: mulai 15.44, selesai 16.13)\n[12/10 17.00] : . Shalat .d21\n(Mulai 16.39, selesai 17.00)\n\n7b. Durasi (.d[angka]) - Titik Awal (maju, pakai .at):\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : .at Olahraga .d20\n(Mulai di 16.00 waktu baris sblmnya, durasi maju 20m: selesai 16.20)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -739,23 +739,25 @@ export default function App() {
         let explicitEnd = null;
         let resumeFromLast = false; // Menandai sesi yang mulainya menyambung dari lastTime
 
-        // 2. MEKANISME DURASI LANGSUNG (Makan .d29 atau . Shalat .d21)
+        // 2. MEKANISME DURASI LANGSUNG (.dN)
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
         if (durMatch) {
-          message = durMatch[1].trim(); // Membuang ".d23" dari string pesan
+          const isAtStartPoint = /^\.at\d*\s+/i.test(message); // ".at X .dN" = TITIK AWAL
+          message = durMatch[1].trim(); // Membuang ".dN" dari string pesan
           const durMins = parseInt(durMatch[2], 10);
-          
-          if (hasExplicitTime) {
-            // Kasus A: "17.00 . Makan .d23" -> Selesai di 17.00, mulai di 17.00 dikurangi 23 menit
-            explicitEnd = time;
-            explicitStart = subtractMinutes(time, durMins);
-          } else if (message.startsWith('.')) {
-            // Kasus B: ". Shalat .d21" -> Menyambung! Mulai dari waktu terakhir tercatat (lastTime), Selesai ditambah 21 menit
+
+          if (isAtStartPoint) {
+            // TITIK AWAL -> durasi MAJU dari waktu baris sebelumnya (+delay .atN)
+            // Catatan: awalan .at dibuang agar nama aktivitas tidak jadi "at X"
+            const atStyleMatch = message.match(/^\.at(\d*)\s+(.*)/i);
+            const durAtDelay = atStyleMatch ? parseInt(atStyleMatch[1] || '0', 10) : 0;
+            if (atStyleMatch) message = atStyleMatch[2].trim();
             resumeFromLast = true;
-            explicitStart = lastTime || time;
+            explicitStart = lastTime ? addMinutes(lastTime, durAtDelay) : time;
             explicitEnd = addMinutes(explicitStart, durMins);
           } else {
-            // Kasus Standar C: "Makan .d29" -> Selesai pada jam pesan, mulai dikurangi 29 menit
+            // TITIK AKHIR (". Nama .dN" / "Nama .dN") -> durasi MUNDUR dari jam pesan.
+            // Jam eksplisit di dalam pesan tetap diprioritaskan (variabel `time`).
             explicitEnd = time;
             explicitStart = subtractMinutes(time, durMins);
           }
@@ -3163,11 +3165,14 @@ export default function App() {
 
                 {/* Aturan 7 (BARU) */}
                 <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                  <p className="font-extrabold text-orange-500 mb-1">7. Durasi Langsung Instan</p>
-                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.d) dan angka di akhir nama. Jam pesan otomatis menjadi jam selesai, dengan durasi sesuai angka.</p>
+                  <p className="font-extrabold text-orange-500 mb-1">7. Durasi Instan (.d)</p>
+                  <p className="mb-2 opacity-80 text-[10px]">Ketik (.d + angka) di akhir nama. Pada <b>TITIK AKHIR</b> (nama biasa / . Nama) durasi MUNDUR dari jam pesan (jam eksplisit dalam pesan diprioritaskan). Pada <b>TITIK AWAL</b> (.at Nama .dN) durasi MAJU dari jam baris sebelumnya.</p>
                   <code className={`block p-3 rounded-xl font-mono text-[10px] leading-relaxed shadow-inner ${isDarkMode ? 'bg-gray-950 text-green-400' : 'bg-gray-900 text-green-400'}`}>
                     [10/7 16.13] : Makan .d29<br/>
-                    <span className="text-gray-500 italic">// Durasi 29 menit, selesai tepat 16.13</span>
+                    <span className="text-gray-500 italic">// Durasi 29 menit mundur, mulai 15.44 selesai 16.13</span><br/>
+                    [10/7 16.00] : Mulai Kerja<br/>
+                    [10/7 16.30] : .at Olahraga .d20<br/>
+                    <span className="text-gray-500 italic">// .at = titik awal: mulai 16.00, durasi maju 20m =&gt; selesai 16.20</span>
                   </code>
                 </div>
 
