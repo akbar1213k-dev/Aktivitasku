@@ -1483,18 +1483,90 @@ export default function App() {
 
   // Ambil 5 baris mentah: 2 di atas, 1 tengah (highlight nama aktivitas), 2 di bawah
   function getFiveLineSnippet(item) {
-    const src = Array.isArray(item._srcLines)
+    const buildResult = (lines, centerIdx) => {
+      if (!lines || lines.length === 0 || centerIdx < 0) return null;
+      const result = [];
+      for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
+        if (i >= 0 && i < lines.length) {
+          const ln = lines[i];
+          result.push({
+            lineNum: i + 1,
+            raw: ln && ln.raw != null ? String(ln.raw) : '',
+            isCenter: i === centerIdx
+          });
+        }
+      }
+      return result.length > 0 ? result : null;
+    };
+
+    const normAct = String(item.activity || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const normDate = String(item.date || '').trim().toLowerCase();
+    const targetStart = item.startTime;
+    const batches = rawLogsDetail || [];
+
+    // Prioritas 1: cocokkan aktivitas ke entri traceSummary berdasarkan identitas
+    // (nama + tanggal + jam mulai). Nomor baris tiap batch mulai dari 1, jadi
+    // pencarian lewat identitas lebih andal daripada nomor baris.
+    let bestEntry = null;
+    let bestBi = -1;
+    let bestScore = -1;
+    batches.forEach((batch, bi) => {
+      const lines = Array.isArray(batch.lines) ? batch.lines : [];
+      (Array.isArray(batch.summary) ? batch.summary : []).forEach(entry => {
+        if (!normAct) return;
+        if (String(entry.name || '').trim().toLowerCase().replace(/\s+/g, ' ') !== normAct) return;
+        let score = 1;
+        if (String(entry.date || '') === String(item.date || '')) score++;
+        if (String(entry.start || '') === String(targetStart || '')) score++;
+        if (score > bestScore || (score === bestScore && bi > bestBi)) {
+          bestScore = score;
+          bestBi = bi;
+          bestEntry = {
+            lines,
+            srcLines: (Array.isArray(entry.sourceLines)
+              ? entry.sourceLines.map(Number).filter(n => !isNaN(n) && n > 0)
+              : []).sort((a, b) => a - b)
+          };
+        }
+      });
+    });
+    if (bestEntry) {
+      let centerIdx = -1;
+      for (const n of bestEntry.srcLines) {
+        const i = n - 1;
+        if (i < 0 || i >= bestEntry.lines.length) continue;
+        const raw = String(bestEntry.lines[i] && bestEntry.lines[i].raw != null ? bestEntry.lines[i].raw : '').trim();
+        if (normAct && raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
+      }
+      if (centerIdx === -1 && bestEntry.srcLines.length > 0) centerIdx = bestEntry.srcLines[0] - 1;
+      const r = buildResult(bestEntry.lines, centerIdx);
+      if (r) return r;
+    }
+
+    // Prioritas 2: cari baris teks mentah yang memuat nama + tanggal aktivitas
+    // (scan dari batch terbaru ke terlama).
+    if (normAct) {
+      for (let bi = batches.length - 1; bi >= 0; bi--) {
+        const lines = Array.isArray(batches[bi].lines) ? batches[bi].lines : [];
+        for (let i = 0; i < lines.length; i++) {
+          const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').toLowerCase();
+          if (!raw.includes(normAct)) continue;
+          if (normDate && !raw.includes(normDate)) continue;
+          const r = buildResult(lines, i);
+          if (r) return r;
+        }
+      }
+    }
+
+    // Prioritas 3: fallback lama (overlap nomor baris sumber)
+    const src = (Array.isArray(item._srcLines)
       ? item._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
-      : [];
+      : []).sort((a, b) => a - b);
     if (src.length === 0) return null;
-    const normAct = String(item.activity || '').toLowerCase().trim().replace(/\s+/g, ' ');
     const min = Math.min(...src);
     const max = Math.max(...src);
-
-    // Skor tiap batch yang memuat baris sumber aktivitas ini:
-    // semakin banyak baris sumber yang cocok => skor tinggi; seri => pilih batch terbaru.
     let best = null;
-    (rawLogsDetail || []).forEach((batch, bi) => {
+    batches.forEach((batch, bi) => {
       const lines = Array.isArray(batch.lines) ? batch.lines : [];
       if (max > lines.length) return;
       const srcInSummary = (batch.summary || []).flatMap(s =>
@@ -1503,22 +1575,19 @@ export default function App() {
       const overlap = src.filter(n => srcInSummary.includes(n)).length;
       if (overlap === 0) return;
       if (!best || overlap > best.overlap || (overlap === best.overlap && bi > best.bi)) {
-        best = { bi, overlap, lines };
+        best = { overlap, lines };
       }
     });
     const lines = best ? best.lines : null;
     if (!lines) return null;
 
-    // Cari baris yang berisi nama aktivitas, mulai dari baris sumber pertama (pembuka aktivitas)
     let centerIdx = -1;
-    const sortedSrc = [...src].sort((a, b) => a - b);
-    for (const n of sortedSrc) {
+    for (const n of src) {
       const i = n - 1;
       if (i < 0 || i >= lines.length) continue;
       const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
       if (normAct && raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
     }
-    // Pencarian cadangan di seluruh rentang baris sumber untuk nama yang sama
     if (centerIdx === -1 && normAct) {
       const seen = new Set();
       for (let i = min - 1; i <= max - 1; i++) {
@@ -1528,22 +1597,8 @@ export default function App() {
         if (raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
       }
     }
-    // Jika nama tidak ditemukan, gunakan baris pembuka aktivitas
-    if (centerIdx === -1) centerIdx = sortedSrc[0] - 1;
-    if (centerIdx < 0) centerIdx = 0;
-
-    const result = [];
-    for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
-      if (i >= 0 && i < lines.length) {
-        const ln = lines[i];
-        result.push({
-          lineNum: i + 1,
-          raw: ln && ln.raw != null ? String(ln.raw) : '',
-          isCenter: i === centerIdx
-        });
-      }
-    }
-    return result;
+    if (centerIdx === -1) centerIdx = src[0] - 1;
+    return buildResult(lines, centerIdx);
   }
 
   // Simpan status isInputVerified: true (ke Firestore jika online, else lokal)
