@@ -1487,42 +1487,63 @@ export default function App() {
       ? item._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
       : [];
     if (src.length === 0) return null;
+    const normAct = String(item.activity || '').toLowerCase().trim().replace(/\s+/g, ' ');
     const min = Math.min(...src);
     const max = Math.max(...src);
-    for (const batch of (rawLogsDetail || [])) {
+
+    // Skor tiap batch yang memuat baris sumber aktivitas ini:
+    // semakin banyak baris sumber yang cocok => skor tinggi; seri => pilih batch terbaru.
+    let best = null;
+    (rawLogsDetail || []).forEach((batch, bi) => {
       const lines = Array.isArray(batch.lines) ? batch.lines : [];
-      if (max > lines.length) continue;
-      const refsMin = (batch.summary || []).some(s =>
-        Array.isArray(s.sourceLines) && s.sourceLines.map(Number).includes(min)
+      if (max > lines.length) return;
+      const srcInSummary = (batch.summary || []).flatMap(s =>
+        Array.isArray(s.sourceLines) ? s.sourceLines.map(Number) : []
       );
-      if (!refsMin) continue;
-      const actName = (item.activity || '').toLowerCase();
-      let centerIdx = -1;
-      for (let i = min - 1; i <= max - 1; i++) {
-        const ln = lines[i];
-        const raw = ln && ln.raw != null ? ln.raw : '';
-        if (actName && raw.toLowerCase().includes(actName)) {
-          centerIdx = i;
-          break;
-        }
+      const overlap = src.filter(n => srcInSummary.includes(n)).length;
+      if (overlap === 0) return;
+      if (!best || overlap > best.overlap || (overlap === best.overlap && bi > best.bi)) {
+        best = { bi, overlap, lines };
       }
-      if (centerIdx === -1) {
-        centerIdx = Math.floor((min - 1 + max - 1) / 2);
-      }
-      const result = [];
-      for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
-        if (i >= 0 && i < lines.length) {
-          const ln = lines[i];
-          result.push({
-            lineNum: i + 1,
-            raw: ln && ln.raw != null ? ln.raw : '',
-            isCenter: i === centerIdx
-          });
-        }
-      }
-      return result;
+    });
+    const lines = best ? best.lines : null;
+    if (!lines) return null;
+
+    // Cari baris yang berisi nama aktivitas, mulai dari baris sumber pertama (pembuka aktivitas)
+    let centerIdx = -1;
+    const sortedSrc = [...src].sort((a, b) => a - b);
+    for (const n of sortedSrc) {
+      const i = n - 1;
+      if (i < 0 || i >= lines.length) continue;
+      const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
+      if (normAct && raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
     }
-    return null;
+    // Pencarian cadangan di seluruh rentang baris sumber untuk nama yang sama
+    if (centerIdx === -1 && normAct) {
+      const seen = new Set();
+      for (let i = min - 1; i <= max - 1; i++) {
+        if (i < 0 || i >= lines.length || seen.has(i)) continue;
+        seen.add(i);
+        const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
+        if (raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
+      }
+    }
+    // Jika nama tidak ditemukan, gunakan baris pembuka aktivitas
+    if (centerIdx === -1) centerIdx = sortedSrc[0] - 1;
+    if (centerIdx < 0) centerIdx = 0;
+
+    const result = [];
+    for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
+      if (i >= 0 && i < lines.length) {
+        const ln = lines[i];
+        result.push({
+          lineNum: i + 1,
+          raw: ln && ln.raw != null ? String(ln.raw) : '',
+          isCenter: i === centerIdx
+        });
+      }
+    }
+    return result;
   }
 
   // Simpan status isInputVerified: true (ke Firestore jika online, else lokal)
@@ -3724,21 +3745,21 @@ export default function App() {
             <div className={`w-full max-w-md flex flex-col max-h-[92vh] rounded-[36px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-100'}`}>
 
               {/* Header Minimalis */}
-              <div className={`shrink-0 px-5 py-3 flex items-center justify-between gap-3 border-b ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-lg">🛡️</span>
+              <div className={`shrink-0 px-5 py-4 flex items-center justify-between gap-3 border-b ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xl">🛡️</span>
                   <div className="min-w-0">
-                    <h1 className={`text-sm font-extrabold leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Verifikasi Input Parsing</h1>
-                    <p className={`text-[10px] leading-tight ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Riwayat Input</p>
+                    <h1 className={`text-base font-extrabold leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Verifikasi Input Parsing</h1>
+                    <p className={`text-[11px] leading-tight ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Riwayat Input</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
+                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
                     {verifCurrent ? verifIndex + 1 : 0}/{verificationQueue.length}
                   </span>
                   <button
                     onClick={() => setIsVerificationOpen(false)}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
                     aria-label="Tutup"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -3757,27 +3778,27 @@ export default function App() {
               ) : (
                 <>
                   {/* Area Tetap: nama aktivitas s/d tombol benar (tidak di-scroll) */}
-                  <div className="shrink-0 px-5 pt-4 pb-2 space-y-3">
+                  <div className="shrink-0 px-5 pt-5 pb-3 space-y-4">
                     {/* Card 1: Nama aktivitas */}
-                    <div className={`rounded-3xl border p-3.5 flex items-center gap-3.5 shadow-sm ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                      <div className="w-[52px] h-[52px] rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 shrink-0">
+                    <div className={`rounded-3xl border p-4 flex items-center gap-4 shadow-sm ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 shrink-0">
                         {String(verifCurrent.activity || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h2 className={`text-base font-black leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                        <h2 className={`text-lg font-black leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                           {verifCurrent.activity || '(tanpa nama)'}
                         </h2>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className={`text-[10px] font-bold tracking-wide rounded-full px-2 py-0.5 border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <span className={`text-[11px] font-bold tracking-wide rounded-full px-2.5 py-1 border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
                             {`${verifCurrent.date || ''} ${verifCurrent.startTime || '?'} - ${verifCurrent.endDate && verifCurrent.endDate !== verifCurrent.date ? `${verifCurrent.endDate} ` : ''}${verifCurrent.endTime || '?'}`}
                           </span>
                           {verifCurrent.category && (
-                            <span className={`text-[10px] font-bold tracking-wide rounded-full px-2 py-0.5 border ${isDarkMode ? 'bg-blue-400/10 border-blue-500/30 text-blue-300' : 'bg-blue-500/10 border-blue-500/15 text-blue-600'}`}>
+                            <span className={`text-[11px] font-bold tracking-wide rounded-full px-2.5 py-1 border ${isDarkMode ? 'bg-blue-400/10 border-blue-500/30 text-blue-300' : 'bg-blue-500/10 border-blue-500/15 text-blue-600'}`}>
                               {verifCurrent.category}
                             </span>
                           )}
                           {verifCurrent.isInputVerified && (
-                            <span className="text-[10px] font-bold tracking-wide rounded-full px-2 py-0.5 border bg-emerald-500/10 border-emerald-500/30 text-emerald-500">✓ Terverifikasi</span>
+                            <span className="text-[11px] font-bold tracking-wide rounded-full px-2.5 py-1 border bg-emerald-500/10 border-emerald-500/30 text-emerald-500">✓ Terverifikasi</span>
                           )}
                         </div>
                       </div>
@@ -3785,14 +3806,14 @@ export default function App() {
 
                     {/* Card 2: Teks mentah sumber (5 pesan, tengah di-highlight) */}
                     <div className={`rounded-3xl overflow-hidden border shadow-sm ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <div className={`flex items-center justify-between gap-2 px-4 py-2 bg-slate-900`}>
+                      <div className={`flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-900`}>
                         <span className="text-slate-300 text-xs font-bold tracking-wide">💬 Teks Mentah Sumber</span>
                         {(() => {
                           const center = verifFiveLine && verifFiveLine.length ? verifFiveLine.find(l => l.isCenter) : null;
                           return center && <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded-full">baris {center.lineNum}</span>;
                         })()}
                       </div>
-                      <div className="bg-slate-950 border-l-4 border-emerald-500 px-3 py-2.5 space-y-1.5 font-mono text-xs">
+                      <div className="bg-slate-950 border-l-4 border-emerald-500 px-4 py-3 space-y-2 font-mono text-xs">
                         {(() => {
                           if (!verifFiveLine || verifFiveLine.length === 0) {
                             return <span className="text-amber-400">Cuplikan mentah tidak ditemukan untuk aktivitas ini.</span>;
@@ -3800,16 +3821,16 @@ export default function App() {
                           return verifFiveLine.map((ln, i) => {
                             if (ln.isCenter) {
                               return (
-                                <div key={i} className="flex gap-3 items-center rounded-xl px-3 py-2 border-2 border-emerald-400 bg-emerald-500/15">
-                                  <span className="text-emerald-400/70 w-6 shrink-0 text-right select-none font-bold">{ln.lineNum}</span>
-                                  <span className="flex-1 break-all text-emerald-200 font-extrabold text-[13px]">{ln.raw || ' '}</span>
+                                <div key={i} className="flex gap-3 items-center rounded-xl px-3 py-2.5 border-2 border-emerald-400 bg-emerald-500/15">
+                                  <span className="text-emerald-400/70 w-7 shrink-0 text-right select-none font-bold">{ln.lineNum}</span>
+                                  <span className="flex-1 break-all text-emerald-200 font-extrabold text-sm leading-snug">{ln.raw || ' '}</span>
                                 </div>
                               );
                             }
                             return (
-                              <div key={i} className="flex gap-3 px-3 py-0.5">
-                                <span className="text-slate-600 w-6 shrink-0 text-right select-none">{ln.lineNum}</span>
-                                <span className="flex-1 break-all text-slate-500">{ln.raw || ' '}</span>
+                              <div key={i} className="flex gap-3 px-3 py-1">
+                                <span className="text-slate-600 w-7 shrink-0 text-right select-none">{ln.lineNum}</span>
+                                <span className="flex-1 break-all text-slate-400 leading-snug">{ln.raw || ' '}</span>
                               </div>
                             );
                           });
@@ -3818,45 +3839,45 @@ export default function App() {
                     </div>
 
                     {/* Row 1: Edit | Hapus */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3.5">
                       <button
                         onClick={() => setEditingItem({ ...verifCurrent })}
-                        className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transition-colors active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transition-colors active:scale-95"
                       >
-                        ✏️ Edit
+                        ✏️ Edit Aktivitas
                       </button>
                       <button
                         onClick={() => setVerifDeleteTarget(verifCurrent)}
-                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-red-500/25 transition-colors active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-red-500/25 transition-colors active:scale-95"
                       >
-                        🗑️ Hapus
+                        🗑️ Hapus Aktivitas
                       </button>
                     </div>
 
                     {/* Row 2: Benar */}
                     <button
                       onClick={handleVerifBenar}
-                      className="w-full bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-3.5 rounded-2xl font-black text-lg shadow-xl shadow-emerald-500/25 transition-all active:scale-95"
+                      className="w-full bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-emerald-500/25 transition-all active:scale-95"
                     >
                       ✅ Benar
                     </button>
                   </div>
 
                   {/* Area Scroll: navigasi & berhenti (jika ruang tidak cukup) */}
-                  <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-2 pb-5 space-y-3">
+                  <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-2 pb-5 space-y-3.5">
                     {/* Navigasi */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3.5">
                       <button
                         onClick={() => setVerifIndex(vi => Math.max(0, vi - 1))}
                         disabled={verifIndex === 0}
-                        className={`py-3 rounded-2xl font-bold transition-colors disabled:opacity-40 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+                        className={`py-3.5 rounded-2xl font-bold transition-colors disabled:opacity-40 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
                       >
                         ◄ Sebelumnya
                       </button>
                       <button
                         onClick={() => setVerifIndex(vi => Math.min(vi + 1, verificationQueue.length - 1))}
                         disabled={verifIndex >= verificationQueue.length - 1}
-                        className={`py-3 rounded-2xl font-bold transition-colors disabled:opacity-40 ${isDarkMode ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}`}
+                        className={`py-3.5 rounded-2xl font-bold transition-colors disabled:opacity-40 ${isDarkMode ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}`}
                       >
                         Selanjutnya ►
                       </button>
@@ -3865,7 +3886,7 @@ export default function App() {
                     {/* Berhenti */}
                     <button
                       onClick={() => setIsVerificationOpen(false)}
-                      className="w-full py-3 rounded-2xl font-bold transition-colors text-red-500/90 hover:bg-red-500/10"
+                      className="w-full py-3.5 rounded-2xl font-bold transition-colors text-red-500/90 hover:bg-red-500/10"
                     >
                       ⛔ Berhenti Verifikasi Input
                     </button>
