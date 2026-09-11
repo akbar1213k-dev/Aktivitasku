@@ -681,6 +681,53 @@ export default function App() {
       return hasYear ? `${dd}/${mm}/${parts[2]}` : `${dd}/${mm}`;
     };
 
+    // --- HELPER BARU: PECAH AKTIVITAS LINTAS TENGAH MALAM PER HARI ---
+    // Contoh: Tidur 10/9 23.05 - 11/9 05.49 dipecah menjadi:
+    //   10/9 23.05 - 23.59  dan  11/9 00.01 - 05.49
+    // Batas antar hari: hari pertama berakhir 23.59, hari berikutnya mulai 00.01.
+    const splitOvernightActivity = (act) => {
+      if (!act.endDate || act.endDate === act.date) return [act];
+
+      const srcLines = Array.isArray(act._srcLines) ? [...act._srcLines] : [];
+      const baseCreated = typeof act.createdAt === 'number' ? act.createdAt : Date.now();
+      const makePart = (date, start, end, offset) => {
+        const part = {
+          ...act,
+          id: crypto.randomUUID(),
+          date,
+          endDate: date,
+          startTime: start,
+          endTime: end,
+          segments: [{ start, end }],
+          createdAt: baseCreated + offset,
+        };
+        if (srcLines.length > 0) part._srcLines = srcLines;
+        return finalizeSession(part);
+      };
+
+      const parts = [];
+      let curDate = act.date;
+      let guard = 0;
+
+      // Bagian hari pertama + hari tengah (jika ada), sampai sebelum hari terakhir
+      while (curDate !== act.endDate && guard < 365) {
+        guard++;
+        const pStart = curDate === act.date ? act.startTime : '00.01';
+        const pEnd = '23.59';
+        if (toMinOfDay(pEnd) > toMinOfDay(pStart)) {
+          parts.push(makePart(curDate, pStart, pEnd, parts.length));
+        }
+        curDate = addDays(curDate);
+      }
+
+      // Bagian hari terakhir (act.endDate); segmen kosong (selesai 00.00) dihilangkan
+      if (toMinOfDay(act.endTime) > toMinOfDay('00.01')) {
+        parts.push(makePart(act.endDate, '00.01', act.endTime, parts.length));
+      }
+
+      return parts.length > 0 ? parts : [act];
+    };
+
     const lines = inputText.split('\n');
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
@@ -1010,13 +1057,29 @@ export default function App() {
        closeTracedSession(activeSession, lastSeg.start, activeSession.date, lastIdx);
     }
 
+    // --- FITUR BARU: PECAH AKTIVITAS LINTAS TENGAH MALAM PER HARI ---
+    const preMergeActivities = [];
+    newActivities.forEach(act => {
+      const parts = splitOvernightActivity(act);
+      if (parts.length > 1) {
+        const lineNums = Array.isArray(act._srcLines) ? act._srcLines : [];
+        const partDesc = parts.map(p => `${p.date} ${p.startTime}-${p.endTime}`).join(', ');
+        lineNums.forEach(n => {
+          if (traceLines[n - 1] && !traceLines[n - 1].notes.some(t => t.startsWith('Sesi melewati tengah malam'))) {
+            traceLines[n - 1].notes.push(`Sesi melewati tengah malam => dipecah per hari: ${partDesc}`);
+          }
+        });
+      }
+      preMergeActivities.push(...parts);
+    });
+
     // --- FITUR BARU: AUTO-MERGE AKTIVITAS BERNAMA SAMA ---
     const finalNewActivities = [];
     const activitiesToUpdate = [];
 
     // 1. Kumpulkan semua aktivitas baru berdasarkan Tanggal + Nama yang sama
     const groupedActs = {};
-    newActivities.forEach(act => {
+    preMergeActivities.forEach(act => {
       // Menggunakan toUpperCase() agar 'Masak' dan 'masak' tetap dianggap sama persis
       const key = `${act.date}__${act.activity.trim().toUpperCase()}`;
       if (!groupedActs[key]) groupedActs[key] = [];
@@ -1359,10 +1422,10 @@ export default function App() {
   const verificationQueue = sortVerifQueue(parsedData.filter(a => a.isInputVerified === false));
 
   const verifCurrent = verificationQueue[verifIndex] || null;
-  const verifSnippet = verifCurrent ? getRawSnippet(verifCurrent) : null;
+  const verifFiveLine = verifCurrent ? getFiveLineSnippet(verifCurrent) : null;
 
-  // Ekstrak cuplikan baris mentah sumber dari jejak parse (batch) sebuah aktivitas
-  function getRawSnippet(item) {
+  // Ambil 5 baris mentah: 2 di atas, 1 tengah (highlight nama aktivitas), 2 di bawah
+  function getFiveLineSnippet(item) {
     const src = Array.isArray(item._srcLines)
       ? item._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
       : [];
@@ -1372,17 +1435,35 @@ export default function App() {
     for (const batch of (rawLogsDetail || [])) {
       const lines = Array.isArray(batch.lines) ? batch.lines : [];
       if (max > lines.length) continue;
-      // Pastikan batch ini benar-benar yang menghasilkan aktivitas ini
       const refsMin = (batch.summary || []).some(s =>
         Array.isArray(s.sourceLines) && s.sourceLines.map(Number).includes(min)
       );
       if (!refsMin) continue;
-      const snippet = [];
+      const actName = (item.activity || '').toLowerCase();
+      let centerIdx = -1;
       for (let i = min - 1; i <= max - 1; i++) {
         const ln = lines[i];
-        snippet.push(ln && ln.raw != null ? ln.raw : '');
+        const raw = ln && ln.raw != null ? ln.raw : '';
+        if (actName && raw.toLowerCase().includes(actName)) {
+          centerIdx = i;
+          break;
+        }
       }
-      return snippet;
+      if (centerIdx === -1) {
+        centerIdx = Math.floor((min - 1 + max - 1) / 2);
+      }
+      const result = [];
+      for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
+        if (i >= 0 && i < lines.length) {
+          const ln = lines[i];
+          result.push({
+            lineNum: i + 1,
+            raw: ln && ln.raw != null ? ln.raw : '',
+            isCenter: i === centerIdx
+          });
+        }
+      }
+      return result;
     }
     return null;
   }
@@ -3585,54 +3666,51 @@ export default function App() {
           <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 ${isDarkMode ? 'bg-gray-950/70 backdrop-blur-lg' : 'bg-gray-200/70 backdrop-blur-lg'}`}>
             <div className={`w-full max-w-md flex flex-col max-h-[92vh] rounded-[36px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-100'}`}>
 
-              {/* Header Hero */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-500 to-amber-500 text-white p-5 shrink-0">
-                <div className="absolute -top-4 -right-4 opacity-10">
-                  <svg className="w-40 h-40" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-                </div>
-                <div className="absolute bottom-3 right-10 w-10 h-10 bg-white/15 backdrop-blur-sm rounded-full shadow-inner"></div>
-                <div className="absolute top-12 left-24 w-6 h-6 bg-white/10 backdrop-blur-sm rounded-full"></div>
-
-                <div className="relative z-10">
-                  <p className="text-orange-100 text-[10px] font-black uppercase tracking-widest mb-1">Riwayat Input</p>
-                  <h1 className="text-2xl font-black drop-shadow-md leading-tight truncate">Verifikasi Input Parsing</h1>
-
-                  <div className="flex items-center justify-between gap-3 mt-4">
-                    <span className="bg-white/20 backdrop-blur-sm border border-white/30 text-white text-xs font-extrabold px-3 py-1.5 rounded-full shadow-sm">
-                      Aktivitas {verifCurrent ? verifIndex + 1 : 0} dari {verificationQueue.length}
-                    </span>
-                    <button
-                      onClick={() => setIsVerificationOpen(false)}
-                      className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-sm transition-colors active:scale-90"
-                      aria-label="Tutup"
-                    >
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
+              {/* Header Minimalis */}
+              <div className={`shrink-0 px-5 py-3 flex items-center justify-between gap-3 border-b ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-lg">🛡️</span>
+                  <div className="min-w-0">
+                    <h1 className={`text-sm font-extrabold leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Verifikasi Input Parsing</h1>
+                    <p className={`text-[10px] leading-tight ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Riwayat Input</p>
                   </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
+                    {verifCurrent ? verifIndex + 1 : 0}/{verificationQueue.length}
+                  </span>
+                  <button
+                    onClick={() => setIsVerificationOpen(false)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+                    aria-label="Tutup"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
                 </div>
               </div>
 
               {/* Body */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {!verifCurrent && (
+              {!verifCurrent ? (
+                <div className="flex-1 min-h-0 overflow-y-auto p-5">
                   <div className="flex flex-col items-center justify-center text-gray-400 py-16 text-center">
                     <div className="text-5xl mb-4">🗂️</div>
                     <p className="font-medium text-sm">Tidak ada aktivitas yang perlu diverifikasi.</p>
                   </div>
-                )}
-
-                {verifCurrent && (
-                  <>
+                </div>
+              ) : (
+                <>
+                  {/* Area Tetap: nama aktivitas s/d tombol benar (tidak di-scroll) */}
+                  <div className="shrink-0 px-5 pt-4 pb-2 space-y-3">
                     {/* Card 1: Nama aktivitas */}
-                    <div className={`rounded-3xl border p-4 flex items-center gap-4 shadow-sm ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
-                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 shrink-0">
+                    <div className={`rounded-3xl border p-3.5 flex items-center gap-3.5 shadow-sm ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
+                      <div className="w-[52px] h-[52px] rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 shrink-0">
                         {String(verifCurrent.activity || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h2 className={`text-lg font-black leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                        <h2 className={`text-base font-black leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                           {verifCurrent.activity || '(tanpa nama)'}
                         </h2>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <span className={`text-[10px] font-bold tracking-wide rounded-full px-2 py-0.5 border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
                             {`${verifCurrent.date || ''} ${verifCurrent.startTime || '?'} - ${verifCurrent.endDate && verifCurrent.endDate !== verifCurrent.date ? `${verifCurrent.endDate} ` : ''}${verifCurrent.endTime || '?'}`}
                           </span>
@@ -3648,36 +3726,36 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Card 2: Teks mentah sumber */}
+                    {/* Card 2: Teks mentah sumber (5 pesan, tengah di-highlight) */}
                     <div className={`rounded-3xl overflow-hidden border shadow-sm ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-900">
+                      <div className={`flex items-center justify-between gap-2 px-4 py-2 bg-slate-900`}>
                         <span className="text-slate-300 text-xs font-bold tracking-wide">💬 Teks Mentah Sumber</span>
                         {(() => {
-                          const src = Array.isArray(verifCurrent._srcLines)
-                            ? verifCurrent._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
-                            : [];
-                          const label = src.length ? `${Math.min(...src)}-${Math.max(...src)}` : '';
-                          return label && <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded-full">baris {label}</span>;
+                          const center = verifFiveLine && verifFiveLine.length ? verifFiveLine.find(l => l.isCenter) : null;
+                          return center && <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded-full">baris {center.lineNum}</span>;
                         })()}
                       </div>
-                      <div className="bg-slate-950 border-l-4 border-emerald-500 text-emerald-400 font-mono text-xs p-4 leading-relaxed overflow-x-auto min-h-[110px] max-h-[40vh] overflow-y-auto">
+                      <div className="bg-slate-950 border-l-4 border-emerald-500 px-3 py-2.5 space-y-1.5 font-mono text-xs">
                         {(() => {
-                          const lines = verifSnippet || [];
-                          if (lines.length === 0) {
+                          if (!verifFiveLine || verifFiveLine.length === 0) {
                             return <span className="text-amber-400">Cuplikan mentah tidak ditemukan untuk aktivitas ini.</span>;
                           }
-                          const base = (() => {
-                            const src = Array.isArray(verifCurrent._srcLines)
-                              ? verifCurrent._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
-                              : [];
-                            return src.length ? Math.min(...src) : 1;
-                          })();
-                          return lines.map((ln, i) => (
-                            <div key={i} className="flex gap-3">
-                              <span className="text-slate-600 w-6 shrink-0 text-right select-none">{base + i}</span>
-                              <span className="flex-1 break-all">{ln || ' '}</span>
-                            </div>
-                          ));
+                          return verifFiveLine.map((ln, i) => {
+                            if (ln.isCenter) {
+                              return (
+                                <div key={i} className="flex gap-3 items-center rounded-xl px-3 py-2 border-2 border-emerald-400 bg-emerald-500/15">
+                                  <span className="text-emerald-400/70 w-6 shrink-0 text-right select-none font-bold">{ln.lineNum}</span>
+                                  <span className="flex-1 break-all text-emerald-200 font-extrabold text-[13px]">{ln.raw || ' '}</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={i} className="flex gap-3 px-3 py-0.5">
+                                <span className="text-slate-600 w-6 shrink-0 text-right select-none">{ln.lineNum}</span>
+                                <span className="flex-1 break-all text-slate-500">{ln.raw || ' '}</span>
+                              </div>
+                            );
+                          });
                         })()}
                       </div>
                     </div>
@@ -3686,26 +3764,29 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         onClick={() => setEditingItem({ ...verifCurrent })}
-                        className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transition-colors active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-blue-500/25 transition-colors active:scale-95"
                       >
-                        ✏️ Edit Aktivitas
+                        ✏️ Edit
                       </button>
                       <button
                         onClick={() => setVerifDeleteTarget(verifCurrent)}
-                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-red-500/25 transition-colors active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-red-500/25 transition-colors active:scale-95"
                       >
-                        🗑️ Hapus Aktivitas
+                        🗑️ Hapus
                       </button>
                     </div>
 
                     {/* Row 2: Benar */}
                     <button
                       onClick={handleVerifBenar}
-                      className="w-full bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-emerald-500/25 transition-all active:scale-95"
+                      className="w-full bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-3.5 rounded-2xl font-black text-lg shadow-xl shadow-emerald-500/25 transition-all active:scale-95"
                     >
                       ✅ Benar
                     </button>
+                  </div>
 
+                  {/* Area Scroll: navigasi & berhenti (jika ruang tidak cukup) */}
+                  <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-2 pb-5 space-y-3">
                     {/* Navigasi */}
                     <div className="grid grid-cols-2 gap-3">
                       <button
@@ -3731,9 +3812,9 @@ export default function App() {
                     >
                       ⛔ Berhenti Verifikasi Input
                     </button>
-                  </>
-                )}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
