@@ -728,6 +728,48 @@ export default function App() {
       return parts.length > 0 ? parts : [act];
     };
 
+    // --- HELPER BARU: GABUNG SESI YANG JEDANYA < 3 MENIT ---
+    // Jika dua sesi berurutan dari aktivitas yang sama dipisah jeda < 3 menit,
+    // kedua sesi disatukan (jeda dihilangkan) menjadi satu segmen kontinu.
+    const MIN_PAUSE_MERGE = 3;
+    const mergeCloseSegments = (act) => {
+      if (!act.segments || act.segments.length < 2) return act;
+      const merged = [];
+      let mergedCount = 0;
+      act.segments.forEach(seg => {
+        const prev = merged[merged.length - 1];
+        if (prev && prev.end && seg.start) {
+          let pause = toMinOfDay(seg.start) - toMinOfDay(prev.end);
+          if (pause < 0) pause += 24 * 60; // lintas tengah malam tetap dihitung sebagai jeda
+          if (pause >= 0 && pause < MIN_PAUSE_MERGE) {
+            prev.end = seg.end;
+            mergedCount++;
+            return;
+          }
+        }
+        merged.push({ ...seg });
+      });
+      if (mergedCount === 0) return act;
+      act.segments = merged;
+      act._mergedCount = mergedCount;
+      // Hitung ulang jam & durasi total (nama aktivitas tidak diubah)
+      let total = 0;
+      merged.forEach(seg => {
+        if (seg.start && seg.end) {
+          const info = calculateDurationInfo(seg.start, seg.end);
+          seg.rawMinutes = info.rawMinutes;
+          total += info.rawMinutes;
+        }
+      });
+      act.startTime = merged[0].start;
+      act.endTime = merged[merged.length - 1].end || act.startTime;
+      act.rawMinutes = total;
+      const hours = Math.floor(total / 60);
+      const minutes = total % 60;
+      act.durationText = hours > 0 && minutes > 0 ? `${hours}j ${minutes}m` : hours > 0 ? `${hours}j` : `${minutes}m`;
+      return act;
+    };
+
     const lines = inputText.split('\n');
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
@@ -1185,6 +1227,21 @@ export default function App() {
     // (data lama tanpa field diperlakukan sebagai sudah terverifikasi).
     allActivitiesToCheck.forEach(act => {
       act.isInputVerified = false;
+    });
+
+    // --- FITUR BARU: GABUNG SESI YANG JEDANYA < 3 MENIT ---
+    allActivitiesToCheck.forEach(act => {
+      const mergedAct = mergeCloseSegments(act);
+      if (mergedAct._mergedCount > 0) {
+        const lineNums = Array.isArray(act._srcLines) ? act._srcLines : [];
+        const note = `Sesi digabung (jeda < ${MIN_PAUSE_MERGE} menit): ${mergedAct._mergedCount} pasangan`;
+        lineNums.forEach(n => {
+          if (traceLines[n - 1] && !traceLines[n - 1].notes.some(t => t.startsWith('Sesi digabung'))) {
+            traceLines[n - 1].notes.push(note);
+          }
+        });
+        delete mergedAct._mergedCount;
+      }
     });
 
     // --- BANGUN RINGKASAN AKTIVITAS AKHIR (setelah auto-merge) UNTUK JEJAK UNDUH ---
