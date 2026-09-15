@@ -67,6 +67,7 @@ export default function App() {
   const [isRawLogsMenuOpen, setIsRawLogsMenuOpen] = useState(false); // Sub-menu Riwayat Input
   const [isVerificationOpen, setIsVerificationOpen] = useState(false); // Wizard Verifikasi Parsing
   const [verifIndex, setVerifIndex] = useState(0);
+  const [verifSession, setVerifSession] = useState(null); // Antrean pending yg dibekukan saat wizard dibuka
   const [verifDeleteTarget, setVerifDeleteTarget] = useState(null);
   const [verifCompletionPopup, setVerifCompletionPopup] = useState(false);
   const [toast, setToast] = useState('');
@@ -1476,9 +1477,9 @@ export default function App() {
     return (a.startTime || '').localeCompare(b.startTime || '');
   });
 
-  const verificationQueue = sortVerifQueue(parsedData.filter(a => a.isInputVerified === false));
-
-  const verifCurrent = verificationQueue[verifIndex] || null;
+  // Saat wizard terbuka, navigasi memakai antrean yang dibekukan (verifSession)
+  // sehingga tidak goyah oleh penggantian parsedData dari snapshot Firestore.
+  const verifCurrent = isVerificationOpen && verifSession ? (verifSession[verifIndex] || null) : null;
   const verifFiveLine = verifCurrent ? getFiveLineSnippet(verifCurrent) : null;
 
   // Ambil 5 baris mentah: 2 di atas, 1 tengah (highlight nama aktivitas), 2 di bawah
@@ -1604,48 +1605,35 @@ export default function App() {
   // Simpan status isInputVerified: true (ke Firestore jika online, else lokal)
   const markVerified = async (item) => {
     if (!item) return false;
+    setParsedData(prev => prev.map(i => i.id === item.id ? { ...i, isInputVerified: true } : i));
     try {
       if (user && db) {
         const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'activities', item.id);
         await updateDoc(docRef, { isInputVerified: true });
-      } else {
-        setParsedData(prev => prev.map(i => i.id === item.id ? { ...i, isInputVerified: true } : i));
       }
       return true;
     } catch {
       showToast('Gagal menyimpan status verifikasi.');
-      return false;
+      return true;
     }
   };
 
   // Tampilkan pop-up "Semua data input telah selesai diverifikasi" + tutup wizard
   const showVerifComplete = () => {
     setIsVerificationOpen(false);
+    setVerifSession(null);
     setVerifIndex(0);
     setVerifCompletionPopup(true);
     setTimeout(() => setVerifCompletionPopup(false), 2400);
   };
 
-  // Lanjut ke aktivitas berikutnya (kronologis) setelah sebuah item selesai
-  // (terverifikasi/dihapus). "anchor" menentukan posisi kronologis item tsb.
-  const goAfterDone = (excludeId, anchor) => {
-    const rest = parsedData.filter(a => a.id !== excludeId);
-    const q2 = sortVerifQueue(rest);
-    const anchorKey = anchor ? `${anchor.date || ''}|${anchor.startTime || ''}` : '';
-    let next = -1;
-    for (let i = 0; i < q2.length; i++) {
-      const act = q2[i];
-      if (act.isInputVerified !== false) continue;
-      const key = `${act.date || ''}|${act.startTime || ''}`;
-      if (anchorKey === '' || key >= anchorKey) { next = i; break; }
-    }
-    if (next === -1) {
-      const anyLeft = q2.some(a => a.isInputVerified === false);
-      if (anyLeft) {
-        setVerifIndex(q2.findIndex(a => a.isInputVerified === false));
-      } else {
-        showVerifComplete();
-      }
+  // Lanjut ke aktivitas berikutnya di dalam antrean yang dibekukan (verifSession).
+  // Tidak lagi bergantung pada parsedData/snapshot yang bisa berubah di tengah alur.
+  const advanceVerif = () => {
+    const len = verifSession ? verifSession.length : 0;
+    const next = verifIndex + 1;
+    if (next >= len) {
+      showVerifComplete();
     } else {
       setVerifIndex(next);
     }
@@ -1654,20 +1642,22 @@ export default function App() {
   // Buka wizard dimulai dari aktivitas pertama yang belum diverifikasi
   const openVerification = () => {
     setIsRawLogsMenuOpen(false);
-    if (verificationQueue.length === 0) {
+    const pending = sortVerifQueue(parsedData.filter(a => a.isInputVerified === false));
+    if (pending.length === 0) {
       showVerifComplete();
       return;
     }
+    setVerifSession(pending);
     setVerifIndex(0);
     setIsVerificationOpen(true);
   };
 
   // Tombol "✅ Benar": tandai terverifikasi lalu lanjutkan
   const handleVerifBenar = async () => {
-    const item = verificationQueue[verifIndex];
+    const item = verifSession ? verifSession[verifIndex] : null;
     if (!item) return;
     const ok = await markVerified(item);
-    if (ok) goAfterDone(item.id, item);
+    if (ok) advanceVerif();
   };
 
   // Konfirmasi hapus pada wizard: [Ya, Hapus]
@@ -1688,7 +1678,7 @@ export default function App() {
       showToast('Gagal menghapus aktivitas.');
       return;
     }
-    goAfterDone(item.id, item);
+    advanceVerif();
   };
 
   // Fungsi Unduh Teks Mentah (.txt)
@@ -1850,7 +1840,7 @@ export default function App() {
       showToast('Data diperbarui!');
       setEditingItem(null);
       if (isVerificationOpen) {
-        goAfterDone(editingItem.id, updatedItem);
+        advanceVerif();
       }
     } catch {
       showToast('Gagal! Format jam salah.');
@@ -3810,10 +3800,10 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
-                    {verifCurrent ? verifIndex + 1 : 0}/{verificationQueue.length}
+                    {verifCurrent ? verifIndex + 1 : 0}/{verifSession ? verifSession.length : 0}
                   </span>
                   <button
-                    onClick={() => setIsVerificationOpen(false)}
+                    onClick={() => { setIsVerificationOpen(false); setVerifSession(null); }}
                     className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
                     aria-label="Tutup"
                   >
@@ -3930,8 +3920,8 @@ export default function App() {
                         ◄ Sebelumnya
                       </button>
                       <button
-                        onClick={() => setVerifIndex(vi => Math.min(vi + 1, verificationQueue.length - 1))}
-                        disabled={verifIndex >= verificationQueue.length - 1}
+                        onClick={() => setVerifIndex(vi => Math.min(vi + 1, (verifSession ? verifSession.length : 1) - 1))}
+                        disabled={verifIndex >= (verifSession ? verifSession.length : 1) - 1}
                         className={`py-3.5 rounded-2xl font-bold transition-colors disabled:opacity-40 ${isDarkMode ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}`}
                       >
                         Selanjutnya ►
@@ -3940,7 +3930,7 @@ export default function App() {
 
                     {/* Berhenti */}
                     <button
-                      onClick={() => setIsVerificationOpen(false)}
+                      onClick={() => { setIsVerificationOpen(false); setVerifSession(null); }}
                       className="w-full py-3.5 rounded-2xl font-bold transition-colors text-red-500/90 hover:bg-red-500/10"
                     >
                       ⛔ Berhenti Verifikasi Input
