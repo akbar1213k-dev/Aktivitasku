@@ -3786,37 +3786,28 @@ export default function App() {
           </div>
         )}
 
-        {/* --- WIZARD VERIFIKASI INPUT PARSING --- */}
+        {/* --- WIZARD VERIFIKASI INPUT PARSING (LAYAR PENUH) --- */}
         {isVerificationOpen && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 ${isDarkMode ? 'bg-gray-950/70 backdrop-blur-lg' : 'bg-gray-200/70 backdrop-blur-lg'}`}>
-            <div className={`w-full max-w-md flex flex-col max-h-[92vh] rounded-[36px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-100'}`}>
+          <div className={`fixed inset-0 z-50 flex flex-col ${isDarkMode ? 'bg-gray-950' : 'bg-gray-100'}`}>
+            <div className={`w-full max-w-md mx-auto flex flex-col h-full overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
 
-              {/* Header Minimalis */}
-              <div className={`shrink-0 px-5 py-4 flex items-center justify-between gap-3 border-b ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-xl">🛡️</span>
-                  <div className="min-w-0">
-                    <h1 className={`text-base font-extrabold leading-tight truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Verifikasi Input Parsing</h1>
-                    <p className={`text-[11px] leading-tight ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Riwayat Input</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
-                    {verifCurrent ? verifIndex + 1 : 0}/{verifSession ? verifSession.length : 0}
-                  </span>
-                  <button
-                    onClick={() => { setIsVerificationOpen(false); setVerifSession(null); }}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
-                    aria-label="Tutup"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                  </button>
-                </div>
+              {/* Bar Atas: tombol kembali + progres (tanpa judul) */}
+              <div className={`shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+                <button
+                  onClick={() => { setIsVerificationOpen(false); setVerifSession(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full font-bold transition-colors active:scale-95 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                  Kembali
+                </button>
+                <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${isDarkMode ? 'bg-orange-400/10 border-orange-500/30 text-orange-300' : 'bg-orange-500/10 border-orange-500/15 text-orange-600'}`}>
+                  {verifCurrent ? verifIndex + 1 : 0}/{verifSession ? verifSession.length : 0}
+                </span>
               </div>
 
               {/* Body */}
               {!verifCurrent ? (
-                <div className="flex-1 min-h-0 overflow-y-auto p-5">
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-5">
                   <div className="flex flex-col items-center justify-center text-gray-400 py-16 text-center">
                     <div className="text-5xl mb-4">🗂️</div>
                     <p className="font-medium text-sm">Tidak ada aktivitas yang perlu diverifikasi.</p>
@@ -3824,8 +3815,8 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  {/* Area Tetap: nama aktivitas s/d tombol benar (tidak di-scroll) */}
-                  <div className="shrink-0 px-5 pt-5 pb-3 space-y-4">
+{/* Semua konten dalam satu area scroll: identitas aktivitas, cuplikan, tombol */}
+                  <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-6 space-y-4">
                     {/* Card 1: Nama aktivitas */}
                     <div className={`rounded-3xl border p-4 flex items-center gap-4 shadow-sm ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}`}>
                       <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 shrink-0">
@@ -3860,7 +3851,7 @@ export default function App() {
                           return center && <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded-full">baris {center.lineNum}</span>;
                         })()}
                       </div>
-                      <div className="bg-slate-950 border-l-4 border-emerald-500 px-4 py-3 space-y-2 font-mono text-xs">
+                      <div className="bg-slate-950 border-l-4 border-emerald-500 px-4 py-3 space-y-2 font-mono text-xs max-h-[200px] overflow-y-auto">
                         {(() => {
                           if (!verifSnippet || verifSnippet.length === 0) {
                             return <span className="text-amber-400">Cuplikan mentah tidak ditemukan untuk aktivitas ini.</span>;
@@ -3908,10 +3899,7 @@ export default function App() {
                     >
                       ✅ Benar
                     </button>
-                  </div>
 
-                  {/* Area Scroll: navigasi & berhenti (jika ruang tidak cukup) */}
-                  <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-2 pb-5 space-y-3.5">
                     {/* Navigasi */}
                     <div className="grid grid-cols-2 gap-3.5">
                       <button
