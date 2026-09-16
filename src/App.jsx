@@ -1481,14 +1481,14 @@ export default function App() {
   // Saat wizard terbuka, navigasi memakai antrean yang dibekukan (verifSession)
   // sehingga tidak goyah oleh penggantian parsedData dari snapshot Firestore.
   const verifCurrent = isVerificationOpen && verifSession ? (verifSession[verifIndex] || null) : null;
-  const verifFiveLine = verifCurrent ? getFiveLineSnippet(verifCurrent) : null;
+  const verifSnippet = verifCurrent ? getVerifSnippet(verifCurrent) : null;
 
-  // Ambil 5 baris mentah: 2 di atas, 1 tengah (highlight nama aktivitas), 2 di bawah
-  function getFiveLineSnippet(item) {
+  // Ambil 15 baris mentah: 7 di atas, 1 tengah (highlight nama aktivitas), 7 di bawah
+  function getVerifSnippet(item) {
     const buildResult = (lines, centerIdx) => {
       if (!lines || lines.length === 0 || centerIdx < 0) return null;
       const result = [];
-      for (let i = centerIdx - 2; i <= centerIdx + 2; i++) {
+      for (let i = centerIdx - 7; i <= centerIdx + 7; i++) {
         if (i >= 0 && i < lines.length) {
           const ln = lines[i];
           result.push({
@@ -2286,6 +2286,7 @@ export default function App() {
                                 : `${item.date} • ${item.startTime} - ${item.endTime}`}
                             </p>
                             {item.category && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-600'}`}>{item.category}</span>}
+                            {item.isInputVerified === true && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600'}`}>✓ Terverifikasi</span>}
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
@@ -3850,21 +3851,21 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Card 2: Teks mentah sumber (5 pesan, tengah di-highlight) */}
+                    {/* Card 2: Teks mentah sumber (15 baris, tengah di-highlight) */}
                     <div className={`rounded-3xl overflow-hidden border shadow-sm ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                       <div className={`flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-900`}>
                         <span className="text-slate-300 text-xs font-bold tracking-wide">💬 Teks Mentah Sumber</span>
                         {(() => {
-                          const center = verifFiveLine && verifFiveLine.length ? verifFiveLine.find(l => l.isCenter) : null;
+                          const center = verifSnippet && verifSnippet.length ? verifSnippet.find(l => l.isCenter) : null;
                           return center && <span className="text-emerald-400 font-mono text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded-full">baris {center.lineNum}</span>;
                         })()}
                       </div>
                       <div className="bg-slate-950 border-l-4 border-emerald-500 px-4 py-3 space-y-2 font-mono text-xs">
                         {(() => {
-                          if (!verifFiveLine || verifFiveLine.length === 0) {
+                          if (!verifSnippet || verifSnippet.length === 0) {
                             return <span className="text-amber-400">Cuplikan mentah tidak ditemukan untuk aktivitas ini.</span>;
                           }
-                          return verifFiveLine.map((ln, i) => {
+                          return verifSnippet.map((ln, i) => {
                             if (ln.isCenter) {
                               return (
                                 <div key={i} className="flex gap-3 items-center rounded-xl px-3 py-2.5 border-2 border-emerald-400 bg-emerald-500/15">
