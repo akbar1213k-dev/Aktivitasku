@@ -1043,6 +1043,7 @@ export default function App() {
               lastDate = endDate;
           } else {
               traceLines[lineIdx].notes.push('Diabaikan (tidak ada waktu aktivitas sebelumnya)');
+              lastDate = date; // Tetap catat tanggal agar waktu berjalan (lastTime) membawa tanggalnya
           }
           activeSession = null;
           lastReportedLineIdx = lineIdx;
