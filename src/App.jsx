@@ -64,6 +64,7 @@ export default function App() {
     }
   });
   const [isRawLogsFullScreenOpen, setIsRawLogsFullScreenOpen] = useState(false);
+  const [rawLogViewer, setRawLogViewer] = useState(null); // { batch, index } untuk layar IDE hitam per kelompok
   const [isRawLogsMenuOpen, setIsRawLogsMenuOpen] = useState(false); // Sub-menu Riwayat Input
   const [isVerificationOpen, setIsVerificationOpen] = useState(false); // Wizard Verifikasi Parsing
   const [verifIndex, setVerifIndex] = useState(0);
@@ -1319,7 +1320,7 @@ export default function App() {
     }
 
     // --- FITUR RAW LOG DETAIL: simpan jejak parse per baris + ringkasan ---
-    const newBatch = { raw: inputText, lines: traceLines.filter(Boolean), summary: traceSummary };
+    const newBatch = { inputAt: new Date().toISOString(), raw: inputText, lines: traceLines.filter(Boolean), summary: traceSummary };
     const newRawLogsDetail = [...(rawLogsDetail || []), newBatch];
     setRawLogsDetail(newRawLogsDetail);
     try {
@@ -1466,6 +1467,67 @@ export default function App() {
     return (s.endDate && s.endDate !== s.date)
       ? `${s.date} ${s.start} - ${s.endDate} ${s.end}`
       : `${s.date} ${s.start} - ${s.end}`;
+  };
+
+  // Tanggal input sebuah kelompok (DD/MM/YYYY HH:MM)
+  const fmtInputDate = (iso) => {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '(tanggal input tidak tersimpan)';
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+    } catch {
+      return '(tanggal input tidak tersimpan)';
+    }
+  };
+
+  // Bangun teks tampilan/salin untuk SATU kelompok (gaya laporan beranotasi)
+  const buildSingleGroupViewerText = (batch, bi) => {
+    const out = [];
+    const totalActs = batch && Array.isArray(batch.summary) ? batch.summary.length : 0;
+    out.push('==============================================================');
+    out.push(`AKTIVITASKU - RIWAYAT INPUT & HASIL PARSE (Kelompok #${bi + 1})`);
+    out.push(`Di Input: ${fmtInputDate(batch && batch.inputAt)}  |  Total aktivitas dihasilkan: ${totalActs}`);
+    out.push('==============================================================');
+    out.push('');
+    out.push('BAGIAN 1: TEKS MENTAH');
+    out.push('--------------------------------------');
+    out.push('');
+    String((batch && batch.raw) || '').split('\n').forEach(l => out.push(l));
+    out.push('');
+    out.push('BAGIAN 2: INPUT PER BARIS + HASILNYA');
+    out.push('--------------------------------------');
+    const blines = batch && Array.isArray(batch.lines) ? batch.lines : [];
+    if (blines.length > 0) {
+      const firstRaw = String(blines[0] && blines[0].raw != null ? blines[0].raw : '').trim();
+      out.push('');
+      out.push(`  ${firstRaw}${blines.length > 1 ? ' ...' : ''}`);
+    }
+    blines.forEach((ln, i) => {
+      out.push(`Baris ${i + 1}: ${String(ln && ln.raw != null ? ln.raw : '').trim()}`);
+      const notes = (ln.notes && ln.notes.length) ? ln.notes : ['(tidak ada hasil)'];
+      notes.forEach(note => out.push(`               -> ${note}`));
+    });
+    out.push('');
+    out.push('BAGIAN 3: DAFTAR AKTIVITAS DIHASILKAN');
+    out.push('--------------------------------------');
+    out.push('');
+    if (totalActs === 0) {
+      out.push('(tidak ada aktivitas yang dihasilkan)');
+    } else {
+      (batch.summary || []).forEach((s, idx) => {
+        const name = s.name || '-';
+        const range = (s.endDate && s.endDate !== s.date)
+          ? `${s.date} ${s.start} - ${s.endDate} ${s.end}`
+          : `${s.date} ${s.start} - ${s.end}`;
+        const srcFull = fmtSrcLines(s.sourceLines);
+        out.push(`${idx + 1}. ${name}  |  ${range}${srcFull ? `   (${srcFull})` : ''}`);
+      });
+    }
+    return out.join('\n');
   };
 
   // --- ANTRIAN VERIFIKASI INPUT PARSING ---
@@ -3712,7 +3774,8 @@ export default function App() {
             {/* Panel 2: Catatan Parse */}
             <div className="space-y-4">
               {(rawLogsDetail && rawLogsDetail.length > 0) ? (
-                rawLogsDetail.map((batch, bi) => {
+                [...(rawLogsDetail || [])].reverse().map((batch, ri) => {
+                  const bi = (rawLogsDetail.length - 1) - ri; // indeks asli (kelompok #1 di paling bawah)
                   const linesCount = Array.isArray(batch.lines) ? batch.lines.length : 0;
                   const actsCount = Array.isArray(batch.summary) ? batch.summary.length : 0;
                   const ignoredCount = Array.isArray(batch.lines)
@@ -3730,6 +3793,13 @@ export default function App() {
                         <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${actsCount > 0 ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
                           {actsCount > 0 ? '✓ Parse OK' : '• Tanpa Hasil'}
                         </span>
+                        <button
+                          onClick={() => setRawLogViewer({ batch, index: bi })}
+                          className="ml-auto flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-zinc-700 transition-colors active:scale-95"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                          Lihat
+                        </button>
                       </div>
                       <ul className="space-y-1.5 text-sm">
                         {(batch.summary || []).map((s, si) => {
@@ -3761,6 +3831,67 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* --- LAYAR IDE HITAM: TAMPILAN/ SALIN SATU KELOMPOK --- */}
+        {rawLogViewer && (() => {
+          const text = buildSingleGroupViewerText(rawLogViewer.batch, rawLogViewer.index);
+          const lines = text.split('\n');
+          return (
+            <div className="fixed inset-0 z-[70] bg-black flex flex-col">
+              <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-800">
+                <button
+                  onClick={() => setRawLogViewer(null)}
+                  className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-2 rounded-xl font-bold text-sm border border-zinc-700 transition-colors active:scale-95"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                  Kembali
+                </button>
+                <span className="text-zinc-300 text-xs font-bold truncate">Kelompok #{rawLogViewer.index + 1} — Tekan Salin untuk menyalin seluruh isi</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(text).then(
+                      () => showToast('Teks kelompok disalin!'),
+                      () => showToast('Gagal menyalin teks.')
+                    );
+                  }}
+                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors active:scale-95 shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m9 0l-3-3m0 6l3-3"></path></svg>
+                  Salin
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-auto py-4">
+                <pre className="px-6 text-[11.5px] leading-relaxed font-mono whitespace-pre-wrap">
+                  {lines.map((ln, i) => {
+                    let cls = 'text-emerald-400/90';
+                    if (ln.startsWith('====')) {
+                      cls = 'text-zinc-600 font-bold';
+                    } else if (ln.startsWith('AKTIVITASKU -')) {
+                      cls = 'text-amber-300 font-black';
+                    } else if (ln.startsWith('Di Input:')) {
+                      cls = 'text-zinc-300';
+                    } else if (ln.startsWith('BAGIAN')) {
+                      cls = 'text-orange-400 font-black';
+                    } else if (ln.startsWith('---')) {
+                      cls = 'text-zinc-700';
+                    } else if (ln.trim().startsWith('->')) {
+                      cls = 'text-zinc-500';
+                    } else if (ln.startsWith('Baris ')) {
+                      cls = 'text-green-300 font-bold';
+                    } else if (ln.startsWith('  [')) {
+                      cls = 'text-zinc-400 italic';
+                    } else if (/^\d+\.\s/.test(ln)) {
+                      cls = 'text-emerald-300';
+                    } else if (ln.startsWith('(tidak')) {
+                      cls = 'text-amber-500';
+                    }
+                    return <div key={i} className={cls}>{ln}</div>;
+                  })}
+                </pre>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* --- MODAL SUB-MENU: RIWAYAT INPUT --- */}
         {isRawLogsMenuOpen && (
