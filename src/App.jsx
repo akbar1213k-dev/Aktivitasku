@@ -80,7 +80,7 @@ export default function App() {
 
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
   const handleCopyGuide = () => {
-    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi (.d[angka]) - Titik Akhir (mundur):\n[12/10 16.13] : Makan .d29\n(Durasi 29m mundur: mulai 15.44, selesai 16.13)\n[12/10 17.00] : . Shalat .d21\n(Mulai 16.39, selesai 17.00)\n\n7b. Durasi (.d[angka]) - Titik Awal (maju, pakai .at):\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : .at Olahraga .d20\n(Mulai di 16.00 waktu baris sblmnya, durasi maju 20m: selesai 16.20)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)\n\n10. Durasi Maju Waktu Berjalan (.atN . / .N . Nama):\n.atN . = tutup sesi aktif, tambah N menit dari waktu berjalan (akhir aktivitas sebelumnya)\n.N . Nama = aktivitas Nama berdurasi N menit dari waktu berjalan\n[12/10 19.19] : .at Shalat isya\n[12/10 19.43] : .at5 .\n(Shalat isya mulai 19.19, berakhir 19.24)\n[12/10 19.51] : .9 . Makan\n(Makan mulai 19.24, berakhir 19.33)`;
+    const guideText = `PANDUAN FORMAT TEKS AKTIVITAS:\n\n1. Format Dasar:\n[12/10 08.00] : Sarapan pagi\n[12/10 08.30] : Mulai kerja\n\n2. Format Eksplisit:\n[12/10 09.00] : 10.30 Olahraga\n\n3. Menandai Selesai: (.)\n[12/10 11.00] : .\n\n4. Format Jeda: (..) jeda, (...) lanjut\n[12/10 13.00] : Belajar\n[12/10 14.00] : ..\n[12/10 14.30] : ...\n[12/10 15.30] : .\n\n5. Aktivitas Mundur: (. Nama)\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : . Balas Email\n\n6. Potong Menit Start (.[angka] Nama):\n[12/10 20.15] : .23 Nyuci\n(Mulai 19.52)\n\n7. Durasi (.d[angka]) - Titik Akhir (mundur):\n[12/10 16.13] : Makan .d29\n(Durasi 29m mundur: mulai 15.44, selesai 16.13)\n[12/10 17.00] : . Shalat .d21\n(Mulai 16.39, selesai 17.00)\n\n7b. Durasi (.d[angka]) - Titik Awal (maju, pakai .at):\n[12/10 16.00] : Mulai Kerja\n[12/10 16.30] : .at Olahraga .d20\n(Mulai di 16.00 waktu baris sblmnya, durasi maju 20m: selesai 16.20)\n\n8. Sambung (.at / .at[angka] Nama):\nMulai di jam laporan baris sebelumnya (jam pesan jika ada, jika tidak jam bracket), berakhir di jam laporan baris berikutnya\n[12/10 14.08] : .at7 Belajar\n[12/10 15.00] : 14.30 .\n(Belajar mulai 7m setelah baris sblmnya, berakhir 14.30)\n\n9. Komentar (.h Teks):\n[12/10 15.00] : .h santay\n(Dihiraukan oleh sistem)\n\n10. Durasi Waktu Berjalan (.atN . / .N . Nama):\n.atN . = tutup sesi aktif, tambah N menit dari waktu berjalan (akhir aktivitas sebelumnya)\n.N . Nama = aktivitas Nama mulai di waktu berjalan, BERAKHIR N menit sebelum jam baris ini\n.N . = tutup sesi aktif, BERAKHIR N menit sebelum jam baris ini\n[12/10 19.19] : .at Shalat isya\n[12/10 19.43] : .at5 .\n(Shalat isya mulai 19.19, berakhir 19.24)\n[12/10 19.51] : .9 . Makan\n(Makan mulai 19.24, berakhir 19.42)`;
     navigator.clipboard.writeText(guideText);
     showToast('Teks Panduan Berhasil Disalin!');
   };
@@ -915,13 +915,14 @@ export default function App() {
         let explicitEnd = null;
         let resumeFromLast = false; // Menandai sesi yang mulainya menyambung dari lastTime
 
-        // --- MEKANISME BARU: DURASI MAJU DARI WAKTU BERJALAN (lastTime) ---
-        // .atN .     = tutup sesi aktif, tambah N menit dari waktu berjalan
-        // .N .       = tutup sesi aktif, tambah N menit dari waktu berjalan
-        // .N . Nama  = aktivitas baru [lastTime, lastTime + N]
+        // --- MEKANISME DURASI DARI WAKTU BERJALAN (lastTime) ---
+        // .atN .     = tutup sesi aktif, TAMBAH N menit dari waktu berjalan (fungsi tersendiri)
+        // .N . Nama  = aktivitas baru mulai di waktu berjalan, BERAKHIR N menit sebelum jam baris ini
+        // .N .       = tutup sesi aktif, BERAKHIR N menit sebelum jam baris ini
         let forwardMode = false;
         let forwardMins = 0;
         let forwardName = null; // null = menutup sesi aktif, string = nama aktivitas baru
+        let fromAtDot = false; // .atN (tambah dari waktu berjalan) vs .N (kurangi dari jam baris ini)
 
         // 2. MEKANISME DURASI LANGSUNG (.dN)
         const durMatch = message.match(/(.*?)\s+\.d(\d+)$/i);
@@ -964,6 +965,7 @@ export default function App() {
               // .atN . / .atN => tutup sesi aktif, tambah N menit dari waktu berjalan
               forwardMode = true;
               forwardMins = atDelay || 0;
+              fromAtDot = true;
             } else {
               isAtOpen = true;
             }
@@ -983,6 +985,7 @@ export default function App() {
               forwardMins = numMins;
               forwardName = trailing === '.' ? null : trailing.replace(/^\.\s*/, '').trim();
               message = trailing;
+              fromAtDot = false;
             } else {
               time = subtractMinutes(time, numMins);
               message = trailing;
@@ -1023,11 +1026,18 @@ export default function App() {
           lastTime = explicitEnd;
         }
         else if (forwardMode) {
-          // --- MEKANISME BARU: DURASI MAJU DARI WAKTU BERJALAN (lastTime) ---
+          // --- MEKANISME DURASI DARI WAKTU BERJALAN (lastTime) ---
+          // .atN : TAMBAH N menit dari waktu berjalan (fungsi tersendiri)
+          // .N   : BERAKHIR N menit sebelum jam baris ini; mulai dari waktu berjalan
           if (forwardName) {
-            // .N . Nama => aktivitas baru [lastTime, lastTime + N]
-            const fStart = lastTime || time;
-            const fEnd = addMinutes(fStart, forwardMins);
+            // .N . Nama => aktivitas baru [waktu berjalan, jam baris ini - N]
+            if (!lastTime) {
+              traceLines[lineIdx].notes.push(`Diabaikan (tidak ada waktu berjalan untuk durasi .${forwardMins} . ${forwardName})`);
+              alert(`Error (baris ${lineIdx + 1}): durasi ".${forwardMins} . ${forwardName}" tidak punya waktu berjalan.\n\nTambahkan baris aktivitas/waktu sebelumnya (contoh: [tanggal, jam] Me: aktivitas), lalu jalankan ulang.`);
+              return;
+            }
+            const fStart = lastTime;
+            const fEnd = subtractMinutes(time, forwardMins);
             if (activeSession) {
               const closeSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!closeSeg.end) closeSeg.end = fStart;
@@ -1042,14 +1052,14 @@ export default function App() {
             newActivities.push(finalizeSession(newSess));
             newSess._srcLine = lineIdx;
             newSess._srcLines = [lineIdx + 1];
-            traceLines[lineIdx].notes.push(`Menghasilkan aktivitas "${forwardName}" => ${forwardName} | ${startDate} ${fStart} - ${endDate} ${fEnd} (durasi maju ${forwardMins} menit dari waktu berjalan)`);
+            traceLines[lineIdx].notes.push(`Menghasilkan aktivitas "${forwardName}" => ${forwardName} | ${startDate} ${fStart} - ${endDate} ${fEnd} (berakhir ${forwardMins} menit sebelum jam baris ini)`);
             lastDate = endDate;
             lastTime = fEnd;
           } else {
-            // .atN . / .N . => tutup sesi aktif di (waktu mulai sesi + N)
+            // .atN . / .N . => tutup sesi aktif
             if (activeSession) {
               const fStart = activeSession.segments[0].start;
-              const fEnd = addMinutes(fStart, forwardMins);
+              const fEnd = fromAtDot ? addMinutes(fStart, forwardMins) : subtractMinutes(time, forwardMins);
               activeSession.endDate = activeSession.date;
               const lastSeg = activeSession.segments[activeSession.segments.length - 1];
               if (!lastSeg.end) lastSeg.end = fEnd;
@@ -1058,14 +1068,18 @@ export default function App() {
               activeSession = null;
               lastDate = date;
               lastTime = fEnd;
-              traceLines[lineIdx].notes.push(`Sesi ditutup maju: tambah ${forwardMins} menit dari waktu berjalan => ${fEnd}`);
-            } else {
+              traceLines[lineIdx].notes.push(fromAtDot
+                ? `Sesi ditutup maju: tambah ${forwardMins} menit dari waktu berjalan => ${fEnd}`
+                : `Sesi ditutup: berakhir ${forwardMins} menit sebelum jam baris ini => ${fEnd}`);
+            } else if (fromAtDot) {
               if (lastTime) {
                 lastTime = addMinutes(lastTime, forwardMins);
                 traceLines[lineIdx].notes.push(`Memajukan waktu berjalan +${forwardMins} menit => ${lastTime}`);
               } else {
                 traceLines[lineIdx].notes.push('Tidak ada sesi aktif maupun waktu berjalan untuk digeser maju');
               }
+            } else {
+              traceLines[lineIdx].notes.push(`Tidak ada sesi aktif untuk ditutup dengan .${forwardMins} .`);
             }
           }
           lastReportedLineIdx = lineIdx;
