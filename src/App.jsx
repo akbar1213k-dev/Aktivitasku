@@ -599,22 +599,21 @@ export default function App() {
       byDate[date].push({ act: a, segs });
     });
 
-    const overlaps = []; // { date, members: [{act, segs}] }
+    // Enumerasi pasangan yang bentrok (bukan komponen terhubung) agar jelas
+    // 2 aktivitas mana saja yang tumpang tindih.
+    const overlaps = []; // { date, a, b, oStart, oEnd }
 
     Object.keys(byDate).forEach(date => {
       const entries = byDate[date];
       if (entries.length < 2) return;
-      const parent = entries.map((_, i) => i);
-      const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
-      const union = (a, b) => { parent[find(a)] = find(b); };
 
-      // Tandai pasangan yang bentrok (hanya jika salah satunya aktivitas baru/dicek)
+      // Deteksi pasangan yang bentrok (hanya jika salah satunya aktivitas baru/dicek)
       for (let i = 0; i < entries.length; i++) {
         for (let j = i + 1; j < entries.length; j++) {
           const a = entries[i], b = entries[j];
           if (a.act.id === b.act.id) continue;
           if (!newIds.has(a.act.id) && !newIds.has(b.act.id)) continue;
-          let clash = false;
+          let oStart = null, oEnd = null;
           for (const s1 of a.segs) {
             for (const s2 of b.segs) {
               if (!s1.start || !s1.end || !s2.start || !s2.end) continue;
@@ -622,41 +621,48 @@ export default function App() {
               let x2 = toMins(s2.start), y2 = toMins(s2.end);
               if (y1 <= x1) y1 += 1440; // Melewati tengah malam
               if (y2 <= x2) y2 += 1440;
-              if (x1 < y2 && x2 < y1) { clash = true; break; }
+              if (x1 < y2 && x2 < y1) {
+                oStart = Math.max(x1, x2);
+                oEnd = Math.min(y1, y2);
+                break;
+              }
             }
-            if (clash) break;
+            if (oStart !== null) break;
           }
-          if (clash) union(i, j);
+          if (oStart !== null) overlaps.push({ date, a, b, oStart, oEnd });
         }
       }
-
-      // Kumpulkan komponen terhubung (kelompok yang saling bentrok)
-      const spanOf = (m) => {
-        let ms = Infinity, me = -Infinity;
-        m.segs.forEach(s => {
-          if (!s.start || !s.end) return;
-          let a = toMins(s.start), b = toMins(s.end);
-          if (b <= a) b += 1440;
-          ms = Math.min(ms, a); me = Math.max(me, b);
-        });
-        return ms === Infinity ? null : { ms, me, dur: me - ms };
-      };
-      const comps = {};
-      entries.forEach((e, i) => { const r = find(i); (comps[r] = comps[r] || []).push(e); });
-      Object.keys(comps).forEach(c => {
-        const members = comps[c];
-        if (members.length < 2) return;
-        if (!members.some(m => newIds.has(m.act.id))) return;
-        // Aktivitas "seharian" (rentang >= 23 jam) dilaporkan sendiri dengan rentang penuhnya
-        const fullDay = members.filter(m => { const s = spanOf(m); return !!s && s.dur >= 1380; });
-        const regular = members.filter(m => !fullDay.includes(m));
-        fullDay.forEach(m => overlaps.push({ date, members: [m] }));
-        if (regular.length >= 1) overlaps.push({ date, members: regular });
-        overlaps.sort((a, b) => (a.members.length >= 2 ? 0 : 1) - (b.members.length >= 2 ? 0 : 1));
-      });
     });
 
     if (overlaps.length === 0) return { hasOverlap: false };
+
+    // Urutkan berdasarkan tanggal kemudian jam mulai bentrok agar mudah dibaca
+    const dateKey = (d) => {
+      const p = d.split('/');
+      const hasYear = p.length > 2;
+      const y = hasYear ? (parseInt(p[2], 10) < 100 ? 2000 + parseInt(p[2], 10) : parseInt(p[2], 10)) : new Date().getFullYear();
+      return (y * 10000) + (parseInt(p[1], 10) * 100) + parseInt(p[0], 10);
+    };
+    overlaps.sort((a, b) => dateKey(a.date) - dateKey(b.date) || a.oStart - b.oStart);
+
+    // Deskripsi satu aktivitas: nama + rentang waktunya sendiri + status ada/baru
+    const describe = (member) => {
+      const name = String(member.act.activity || member.act.message || '(tanpa nama)').trim();
+      let startMins = Infinity, endMins = -Infinity, hasSeg = false;
+      member.segs.forEach(s => {
+        if (!s.start || !s.end) return;
+        let a = toMins(s.start), e = toMins(s.end);
+        if (e <= a) e += 1440;
+        startMins = Math.min(startMins, a);
+        endMins = Math.max(endMins, e);
+        hasSeg = true;
+      });
+      const startTxt = hasSeg ? fmtMins(startMins) : '?';
+      const endTxt = hasSeg ? fmtMins(endMins) : '?';
+      const endDate = hasSeg && endMins >= 1440 ? nextDate(member.act.date) : member.act.date;
+      const status = newIds.has(member.act.id) ? 'BARU / AKAN DIINPUT' : 'SUDAH ADA';
+      return { name, date: member.act.date, startTxt, endDate, endTxt, status };
+    };
 
     const datesInvolved = [...new Set(overlaps.map(o => o.date))];
     const titleDate = datesInvolved.length === 1 ? datesInvolved[0] : datesInvolved.join(', ');
@@ -664,27 +670,19 @@ export default function App() {
 
     overlaps.forEach((o, oi) => {
       if (oi > 0) lines.push('');
-      const names = o.members.map(m => String(m.act.activity || m.act.message || '(tanpa nama)').trim());
-      // Rentang irisan kelompok: mulai = terbesar, selesai = terkecil
-      let mInterStart = 0, mInterEnd = Infinity;
-      let envStart = Infinity, envEnd = -1;
-      o.members.forEach(m => {
-        let ms = Infinity, me = -Infinity;
-        m.segs.forEach(s => {
-          if (!s.start || !s.end) return;
-          let a = toMins(s.start), b = toMins(s.end);
-          if (b <= a) b += 1440;
-          ms = Math.min(ms, a); me = Math.max(me, b);
-          envStart = Math.min(envStart, a);
-          envEnd = Math.max(envEnd, b);
-        });
-        mInterStart = Math.max(mInterStart, ms);
-        mInterEnd = Math.min(mInterEnd, me);
+      const a = describe(o.a);
+      const b = describe(o.b);
+      // Tampilkan aktivitas yang sudah ada lebih dulu agar konsisten
+      const ordered = [];
+      if (a.status === 'SUDAH ADA' && b.status === 'BARU / AKAN DIINPUT') ordered.push(a, b);
+      else if (b.status === 'SUDAH ADA' && a.status === 'BARU / AKAN DIINPUT') ordered.push(b, a);
+      else ordered.push(a, b);
+      const oEndDate = o.oEnd >= 1440 ? nextDate(o.date) : o.date;
+      lines.push(`Bentrok #${oi + 1} pada ${o.date}:`);
+      ordered.forEach(m => {
+        lines.push(`  [${m.status}] ${m.name} : [${m.date}]${m.startTxt} - [${m.endDate}]${m.endTxt}`);
       });
-      let rangeStart = mInterStart, rangeEnd = mInterEnd;
-      if (rangeEnd <= rangeStart) { rangeStart = envStart; rangeEnd = envEnd; } // Bentrok berantai tanpa irisan bersama
-      const endDate = rangeEnd >= 1440 ? nextDate(o.date) : o.date;
-      lines.push(`[${names.join(', ')}] ([${o.date}]${fmtMins(rangeStart)} - [${endDate}]${fmtMins(rangeEnd)})`);
+      lines.push(`  => Bertumpuk pada [${o.date}]${fmtMins(o.oStart)} - [${oEndDate}]${fmtMins(o.oEnd)}`);
     });
 
     lines.push('');
