@@ -71,11 +71,19 @@ export default function App() {
   const [verifSession, setVerifSession] = useState(null); // Antrean pending yg dibekukan saat wizard dibuka
   const [verifDeleteTarget, setVerifDeleteTarget] = useState(null);
   const [verifCompletionPopup, setVerifCompletionPopup] = useState(false);
+  const [overlapNotice, setOverlapNotice] = useState(null); // Notifikasi bentrok waktu (mode menggantikan alert)
   const [toast, setToast] = useState('');
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
+  };
+
+  // --- FUNGSI MENYALIN SELURUH ISI NOTIFIKASI BENTROK ---
+  const handleCopyOverlap = () => {
+    if (!overlapNotice) return;
+    navigator.clipboard.writeText(overlapNotice);
+    showToast('Notifikasi bentrok disalin!');
   };
 
   // --- FUNGSI UNTUK MENYALIN TEKS PANDUAN ---
@@ -1357,7 +1365,7 @@ export default function App() {
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
       const overlapCheck = checkTimeOverlap(allActivitiesToCheck, parsedData);
       if (overlapCheck.hasOverlap) {
-         alert(overlapCheck.msg); 
+         setOverlapNotice(overlapCheck.msg); 
          return; 
       }
 
@@ -1976,7 +1984,7 @@ export default function App() {
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN HASIL EDIT ---
       const overlapCheck = checkTimeOverlap([updatedItem], parsedData);
       if (overlapCheck.hasOverlap) {
-         alert(overlapCheck.msg);
+         setOverlapNotice(overlapCheck.msg);
          return; // Membatalkan penyimpanan jika waktu edit bentrok
       }
       // -------------------------------------------------------
@@ -4151,6 +4159,43 @@ export default function App() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* --- MODAL NOTIFIKASI BENTROK WAKTU (DENGAN TOMBOL SALIN) --- */}
+        {overlapNotice && (
+          <div className="fixed inset-0 bg-gray-900/60 z-[75] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className={`w-full max-w-sm max-h-[80vh] flex flex-col rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-100'}`}>
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-11 h-11 shrink-0 rounded-2xl bg-red-500/10 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-extrabold leading-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>Ada Bentrok Waktu!</h3>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Koreksi dulu jam aktivitas Anda.</p>
+                </div>
+              </div>
+
+              <div className={`flex-1 overflow-y-auto whitespace-pre-line font-mono text-xs p-4 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-50 text-gray-700'}`}>
+                {overlapNotice}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCopyOverlap}
+                  className={`flex-1 py-3.5 rounded-2xl font-bold transition-colors flex items-center justify-center gap-1.5 ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+                  Salin
+                </button>
+                <button
+                  onClick={() => setOverlapNotice(null)}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-2xl font-bold transition-colors"
+                >
+                  OK
+                </button>
+              </div>
             </div>
           </div>
         )}
