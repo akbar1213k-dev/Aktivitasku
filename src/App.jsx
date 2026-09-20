@@ -1330,6 +1330,8 @@ export default function App() {
     // (data lama tanpa field diperlakukan sebagai sudah terverifikasi).
     allActivitiesToCheck.forEach(act => {
       act.isInputVerified = false;
+      // Tandai batch produksi agar cuplikan teks mentah dicari di batch yang tepat
+      act._batchIndex = (rawLogsDetail || []).length;
     });
 
     // --- FITUR BARU: GABUNG SESI YANG JEDANYA < 3 MENIT ---
@@ -1663,24 +1665,126 @@ export default function App() {
       return result.length > 0 ? result : null;
     };
 
-    const normAct = String(item.activity || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const normDate = String(item.date || '').trim().toLowerCase();
+    const normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const normAct = normName(item.activity);
     const targetStart = item.startTime;
     const batches = rawLogsDetail || [];
 
+    // Normalisasi tanggal: "12/9" <-> "12/09", tahun opsional (pad nol)
+    const normDate = (d) => {
+      if (!d) return '';
+      const parts = String(d).trim().split('/');
+      if (parts.length < 2) return String(d).trim();
+      const dd = parts[0].padStart(2, '0');
+      const mm = parts[1].padStart(2, '0');
+      let yy = '';
+      if (parts[2]) {
+        const v = String(parts[2]).trim();
+        if (v.length === 2) yy = `20${v}`;
+        else if (v) yy = v.length === 4 ? v : v.padStart(4, '0');
+      }
+      return yy ? `${dd}/${mm}/${yy}` : `${dd}/${mm}`;
+    };
+
+    // Dua tanggal dianggap sama bila hari & bulan cocok (tahun dibandingkan hanya
+    // bila kedua sisi memilikinya, agar "12/9" tetap cocok dengan "12/09/2026").
+    const datesMatch = (a, b) => {
+      const na = normDate(a);
+      const nb = normDate(b);
+      if (!na || !nb) return false;
+      const [da, ma, ya] = na.split('/');
+      const [db, mb, yb] = nb.split('/');
+      if (da !== db || ma !== mb) return false;
+      return !ya || !yb || ya === yb;
+    };
+
+    const toMins = (t) => {
+      if (!t) return -1;
+      const [h, m] = String(t).replace('.', ':').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    // Ekstrak [tanggal jam] dari sebuah baris mentah ("[12/10 08.00] : Belanja")
+    const lineTimeInfo = (raw) => {
+      const m = String(raw || '').match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2})/);
+      return m ? { date: m[1], time: m[2] } : null;
+    };
+
+    // Cari baris pusat berbasis ISI baris: nama + tanggal yang benar (lebih kuat),
+    // dengan waktu mulai terdekat item.startTime sebagai tie-break.
+    // Baris hanya ber-nama (tanpa tanggal) dipakai sebagai cadangan.
+    const locateCenter = (lines) => {
+      if (!Array.isArray(lines) || lines.length === 0) return -1;
+      const itemStartMins = toMins(item.startTime);
+      let bestIdx = -1;
+      let bestScore = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < lines.length; i++) {
+        const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '');
+        if (!normAct || !raw.toLowerCase().includes(normAct)) continue;
+        const info = lineTimeInfo(raw);
+        let score = 1;
+        if (info && datesMatch(info.date, item.date)) score += 3;
+        const dist = (info && itemStartMins >= 0) ? Math.abs(toMins(info.time) - itemStartMins) : (itemStartMins >= 0 ? Infinity : 0);
+        if (score > bestScore || (score === bestScore && dist < bestDist)) {
+          bestScore = score;
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+      return bestIdx;
+    };
+
+    // Tentukan baris pusat: utamakan lokasi berbasis isi baris, lalu nomor baris
+    // sumber (yang mengandung nama + tanggal benar), lalu nama saja, lalu baris 1.
+    const pickCenter = (lines, srcLines) => {
+      const ciLoc = locateCenter(lines);
+      if (ciLoc !== -1) return ciLoc;
+      const sl = (Array.isArray(srcLines) ? srcLines : []).sort((a, b) => a - b);
+      for (const n of sl) {
+        const i = n - 1;
+        if (i < 0 || i >= lines.length) continue;
+        const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
+        if (!raw.toLowerCase().includes(normAct)) continue;
+        const info = lineTimeInfo(raw);
+        if (!item.date || (info && datesMatch(info.date, item.date))) return i;
+      }
+      for (const n of sl) {
+        const i = n - 1;
+        if (i < 0 || i >= lines.length) continue;
+        const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
+        if (normAct && raw.toLowerCase().includes(normAct)) return i;
+      }
+      return sl.length > 0 ? sl[0] - 1 : ciLoc;
+    };
+
+    const fittingEntry = (entry) => normAct && normName(entry.name) === normAct;
+
+    // Prioritas 0: batch yang MENGHASILKAN aktivitas (tag _batchIndex).
+    // Pencocokan eksak untuk data hasil parse baru; item lama tanpa tag
+    // otomatis melewati ke prioritas berikutnya.
+    if (item._batchIndex != null && batches[item._batchIndex]) {
+      const batchLines = Array.isArray(batches[item._batchIndex].lines) ? batches[item._batchIndex].lines : [];
+      let ci = locateCenter(batchLines);
+      if (ci === -1) {
+        const entry = (batches[item._batchIndex].summary || []).find(fittingEntry);
+        if (entry) ci = pickCenter(batchLines, entry.sourceLines);
+      }
+      const r = buildResult(batchLines, ci);
+      if (r) return r;
+    }
+
     // Prioritas 1: cocokkan aktivitas ke entri traceSummary berdasarkan identitas
-    // (nama + tanggal + jam mulai). Nomor baris tiap batch mulai dari 1, jadi
-    // pencarian lewat identitas lebih andal daripada nomor baris.
+    // (nama + tanggal + jam mulai), dengan tanggal menjadi kunci utama.
     let bestEntry = null;
     let bestBi = -1;
     let bestScore = -1;
     batches.forEach((batch, bi) => {
       const lines = Array.isArray(batch.lines) ? batch.lines : [];
       (Array.isArray(batch.summary) ? batch.summary : []).forEach(entry => {
-        if (!normAct) return;
-        if (String(entry.name || '').trim().toLowerCase().replace(/\s+/g, ' ') !== normAct) return;
+        if (!fittingEntry(entry)) return;
         let score = 1;
-        if (String(entry.date || '') === String(item.date || '')) score++;
+        if (datesMatch(entry.date, item.date)) score += 3;
         if (String(entry.start || '') === String(targetStart || '')) score++;
         if (score > bestScore || (score === bestScore && bi > bestBi)) {
           bestScore = score;
@@ -1695,39 +1799,34 @@ export default function App() {
       });
     });
     if (bestEntry) {
-      let centerIdx = -1;
-      for (const n of bestEntry.srcLines) {
-        const i = n - 1;
-        if (i < 0 || i >= bestEntry.lines.length) continue;
-        const raw = String(bestEntry.lines[i] && bestEntry.lines[i].raw != null ? bestEntry.lines[i].raw : '').trim();
-        if (normAct && raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
-      }
-      if (centerIdx === -1 && bestEntry.srcLines.length > 0) centerIdx = bestEntry.srcLines[0] - 1;
+      const centerIdx = pickCenter(bestEntry.lines, bestEntry.srcLines);
       const r = buildResult(bestEntry.lines, centerIdx);
       if (r) return r;
     }
 
-    // Prioritas 2: cari baris teks mentah yang memuat nama + tanggal aktivitas
-    // (scan dari batch terbaru ke terlama).
+    // Prioritas 2: cari baris teks mentah yang memuat nama & tanggal aktivitas
+    // (nomor baris acuan bukan penghitung silang-batch; tanggal dibandingkan
+    // secara dinormalisasi). Scan batch terbaru ke terlama.
     if (normAct) {
       for (let bi = batches.length - 1; bi >= 0; bi--) {
         const lines = Array.isArray(batches[bi].lines) ? batches[bi].lines : [];
         for (let i = 0; i < lines.length; i++) {
           const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').toLowerCase();
           if (!raw.includes(normAct)) continue;
-          if (normDate && !raw.includes(normDate)) continue;
+          const info = lineTimeInfo(String(lines[i].raw));
+          if (item.date && (!info || !datesMatch(info.date, item.date))) continue;
           const r = buildResult(lines, i);
           if (r) return r;
         }
       }
     }
 
-    // Prioritas 3: fallback lama (overlap nomor baris sumber)
+    // Prioritas 3: fallback (overlap nomor baris sumber), pusat tetap ditentukan
+    // berbasis isi baris agar tidak mengikuti tanggal yang salah.
     const src = (Array.isArray(item._srcLines)
       ? item._srcLines.map(Number).filter(n => !isNaN(n) && n > 0)
       : []).sort((a, b) => a - b);
     if (src.length === 0) return null;
-    const min = Math.min(...src);
     const max = Math.max(...src);
     let best = null;
     batches.forEach((batch, bi) => {
@@ -1745,23 +1844,7 @@ export default function App() {
     const lines = best ? best.lines : null;
     if (!lines) return null;
 
-    let centerIdx = -1;
-    for (const n of src) {
-      const i = n - 1;
-      if (i < 0 || i >= lines.length) continue;
-      const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
-      if (normAct && raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
-    }
-    if (centerIdx === -1 && normAct) {
-      const seen = new Set();
-      for (let i = min - 1; i <= max - 1; i++) {
-        if (i < 0 || i >= lines.length || seen.has(i)) continue;
-        seen.add(i);
-        const raw = String(lines[i] && lines[i].raw != null ? lines[i].raw : '').trim();
-        if (raw.toLowerCase().includes(normAct)) { centerIdx = i; break; }
-      }
-    }
-    if (centerIdx === -1) centerIdx = src[0] - 1;
+    const centerIdx = pickCenter(lines, src);
     return buildResult(lines, centerIdx);
   }
 
