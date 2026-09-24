@@ -81,8 +81,8 @@ export default function App() {
 
   // --- FUNGSI MENYALIN SELURUH ISI NOTIFIKASI BENTROK ---
   const handleCopyOverlap = () => {
-    if (!overlapNotice) return;
-    navigator.clipboard.writeText(overlapNotice);
+    if (!overlapNotice || !overlapNotice.msg) return;
+    navigator.clipboard.writeText(overlapNotice.msg);
     showToast('Notifikasi bentrok disalin!');
   };
 
@@ -573,7 +573,7 @@ export default function App() {
   };
 
   // --- FUNGSI PENGECEK TUMPANG TINDIH WAKTU (BENTROK) ---
-  const checkTimeOverlap = (activitiesToCheck, existingData) => {
+  const checkTimeOverlap = (activitiesToCheck, existingData, rawText) => {
     const toMins = (timeStr) => {
       if (!timeStr) return 0;
       const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
@@ -607,15 +607,13 @@ export default function App() {
       byDate[date].push({ act: a, segs });
     });
 
-    // Enumerasi pasangan yang bentrok (bukan komponen terhubung) agar jelas
-    // 2 aktivitas mana saja yang tumpang tindih.
+    // 1. Enumerasi semua pasangan yang bentrok
     const overlaps = []; // { date, a, b, oStart, oEnd }
 
     Object.keys(byDate).forEach(date => {
       const entries = byDate[date];
       if (entries.length < 2) return;
 
-      // Deteksi pasangan yang bentrok (hanya jika salah satunya aktivitas baru/dicek)
       for (let i = 0; i < entries.length; i++) {
         for (let j = i + 1; j < entries.length; j++) {
           const a = entries[i], b = entries[j];
@@ -644,7 +642,6 @@ export default function App() {
 
     if (overlaps.length === 0) return { hasOverlap: false };
 
-    // Urutkan berdasarkan tanggal kemudian jam mulai bentrok agar mudah dibaca
     const dateKey = (d) => {
       const p = d.split('/');
       const hasYear = p.length > 2;
@@ -653,7 +650,7 @@ export default function App() {
     };
     overlaps.sort((a, b) => dateKey(a.date) - dateKey(b.date) || a.oStart - b.oStart);
 
-    // Deskripsi satu aktivitas: nama + rentang waktunya sendiri + status ada/baru
+    // Deskripsi satu aktivitas: nama + rentang waktunya sendiri + status + baris sumber
     const describe = (member) => {
       const name = String(member.act.activity || member.act.message || '(tanpa nama)').trim();
       let startMins = Infinity, endMins = -Infinity, hasSeg = false;
@@ -669,33 +666,140 @@ export default function App() {
       const endTxt = hasSeg ? fmtMins(endMins) : '?';
       const endDate = hasSeg && endMins >= 1440 ? nextDate(member.act.date) : member.act.date;
       const status = newIds.has(member.act.id) ? 'BARU / AKAN DIINPUT' : 'SUDAH ADA';
-      return { name, date: member.act.date, startTxt, endDate, endTxt, status };
+      let srcLines = [];
+      if (Array.isArray(member.act._srcLines)) {
+        srcLines = member.act._srcLines.map(Number).filter(n => !isNaN(n) && n > 0);
+      }
+      return {
+        id: member.act.id,
+        name,
+        date: member.act.date,
+        startTxt,
+        endDate,
+        endTxt,
+        status,
+        isNew: newIds.has(member.act.id),
+        spanDur: hasSeg ? endMins - startMins : 0,
+        rawMinutes: member.act.rawMinutes || 0,
+        srcLines,
+      };
     };
 
-    const datesInvolved = [...new Set(overlaps.map(o => o.date))];
+    // 2. Klasterisasi: gabungkan overlap yang bersambung/beririsan per tanggal
+    const byDateOverlaps = {};
+    overlaps.forEach(o => { (byDateOverlaps[o.date] = byDateOverlaps[o.date] || []).push(o); });
+
+    const groups = [];
+    const allHighlight = new Set();
+
+    Object.keys(byDateOverlaps).forEach(date => {
+      const list = byDateOverlaps[date];
+      const clusters = [];
+      let cur = [list[0]];
+      let curEnd = list[0].oEnd;
+      for (let i = 1; i < list.length; i++) {
+        if (list[i].oStart <= curEnd) { // menyambung / beririsan
+          cur.push(list[i]);
+          if (list[i].oEnd > curEnd) curEnd = list[i].oEnd;
+        } else {
+          clusters.push(cur);
+          cur = [list[i]];
+          curEnd = list[i].oEnd;
+        }
+      }
+      clusters.push(cur);
+
+      clusters.forEach(cluster => {
+        // Aktivitas unik di dalam klaster + adjacency (siapa bentrok dengan siapa)
+        const actsMap = {}; // id -> memberDesc
+        const adj = {};     // id -> Set(id lain yg benar-benar bentrok)
+        cluster.forEach(o => {
+          [o.a, o.b].forEach(m => {
+            const id = m.act.id;
+            if (!actsMap[id]) {
+              actsMap[id] = describe(m);
+              adj[id] = new Set();
+            }
+          });
+          adj[o.a.act.id].add(o.b.act.id);
+          adj[o.b.act.id].add(o.a.act.id);
+        });
+
+        const ids = Object.keys(actsMap);
+
+        // 3. Main = aktivitas yang paling banyak disentuh anggota lain,
+        //    jika seri pilih yang rentangnya terpanjang.
+        let mainId = ids[0];
+        let bestCnt = -1, bestDur = -1;
+        ids.forEach(id => {
+          const cnt = adj[id].size;
+          const dur = actsMap[id].spanDur;
+          if (cnt > bestCnt || (cnt === bestCnt && dur > bestDur)) {
+            bestCnt = cnt; bestDur = dur; mainId = id;
+          }
+        });
+
+        const memberIds = ids.filter(id => id !== mainId);
+        memberIds.sort((x, y) => {
+          const px = actsMap[x].startTxt.replace('.', ':').split(':').map(Number);
+          const py = actsMap[y].startTxt.replace('.', ':').split(':').map(Number);
+          return ((px[0] || 0) * 60 + (px[1] || 0)) - ((py[0] || 0) * 60 + (py[1] || 0));
+        });
+
+        const windowStart = Math.min(...cluster.map(o => o.oStart));
+        const windowEnd = Math.max(...cluster.map(o => o.oEnd));
+        const windowEndDate = windowEnd >= 1440 ? nextDate(date) : date;
+
+        [mainId, ...memberIds].forEach(id => {
+          actsMap[id].srcLines.forEach(n => allHighlight.add(n));
+        });
+
+        groups.push({
+          date,
+          windowStart,
+          windowEnd,
+          windowStartTxt: fmtMins(windowStart),
+          windowEndDate,
+          windowEndTxt: fmtMins(windowEnd),
+          main: actsMap[mainId],
+          members: memberIds.map(id => actsMap[id]),
+        });
+      });
+    });
+
+    groups.sort((a, b) => dateKey(a.date) - dateKey(b.date) || a.windowStart - b.windowStart);
+
+    const highlightLines = Array.from(allHighlight).sort((a, b) => a - b);
+
+    // --- Bangun teks notifikasi (juga dipakai tombol Salin) ---
+    const datesInvolved = [...new Set(groups.map(g => g.date))];
     const titleDate = datesInvolved.length === 1 ? datesInvolved[0] : datesInvolved.join(', ');
     const lines = [`Terdapat tumpang tindih waktu (bentrok) pada tanggal ${titleDate}!`, ''];
 
-    overlaps.forEach((o, oi) => {
-      if (oi > 0) lines.push('');
-      const a = describe(o.a);
-      const b = describe(o.b);
-      // Tampilkan aktivitas yang sudah ada lebih dulu agar konsisten
-      const ordered = [];
-      if (a.status === 'SUDAH ADA' && b.status === 'BARU / AKAN DIINPUT') ordered.push(a, b);
-      else if (b.status === 'SUDAH ADA' && a.status === 'BARU / AKAN DIINPUT') ordered.push(b, a);
-      else ordered.push(a, b);
-      const oEndDate = o.oEnd >= 1440 ? nextDate(o.date) : o.date;
-      lines.push(`Bentrok #${oi + 1} pada ${o.date}:`);
-      ordered.forEach(m => {
-        lines.push(`  [${m.status}] ${m.name} : [${m.date}]${m.startTxt} - [${m.endDate}]${m.endTxt}`);
+    groups.forEach((g, gi) => {
+      if (gi > 0) lines.push('');
+      lines.push(`BENTROK #${gi + 1} pada ${g.date}:`);
+      lines.push(`  Utama: [${g.main.status}] ${g.main.name} : [${g.main.date}]${g.main.startTxt} - [${g.main.endDate}]${g.main.endTxt}`);
+      lines.push(`  Bentrok dengan:`);
+      g.members.forEach(m => {
+        lines.push(`   - [${m.status}] ${m.name} : [${m.date}]${m.startTxt} - [${m.endDate}]${m.endTxt}`);
       });
-      lines.push(`  => Bertumpuk pada [${o.date}]${fmtMins(o.oStart)} - [${oEndDate}]${fmtMins(o.oEnd)}`);
+      lines.push(`  => Bertumpuk pada [${g.date}]${g.windowStartTxt} - [${g.windowEndDate}]${g.windowEndTxt}`);
     });
+
+    if (rawText) {
+      const rawLines = rawText.split('\n');
+      const hlSet = new Set(highlightLines);
+      lines.push('');
+      lines.push(`Teks yang Anda input (${hlSet.size} baris bermasalah, ditandai >>>):`);
+      rawLines.forEach((ln, idx) => {
+        lines.push(`${hlSet.has(idx + 1) ? '>>> ' : '    '}${ln}`);
+      });
+    }
 
     lines.push('');
     lines.push('Silakan sesuaikan kembali jam aktivitas Anda sebelum menyimpan.');
-    return { hasOverlap: true, msg: lines.join('\n') };
+    return { hasOverlap: true, msg: lines.join('\n'), groups, highlightLines, rawText };
   };
   // --------------------------------------------------------
 
@@ -1365,9 +1469,9 @@ export default function App() {
 
     if (allActivitiesToCheck.length > 0) {
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN DATA BARU ---
-      const overlapCheck = checkTimeOverlap(allActivitiesToCheck, parsedData);
+      const overlapCheck = checkTimeOverlap(allActivitiesToCheck, parsedData, inputText);
       if (overlapCheck.hasOverlap) {
-         setOverlapNotice(overlapCheck.msg); 
+         setOverlapNotice(overlapCheck); 
          return; 
       }
 
@@ -2067,7 +2171,7 @@ export default function App() {
       // --- CEK TUMPANG TINDIH SEBELUM MENYIMPAN HASIL EDIT ---
       const overlapCheck = checkTimeOverlap([updatedItem], parsedData);
       if (overlapCheck.hasOverlap) {
-         setOverlapNotice(overlapCheck.msg);
+         setOverlapNotice(overlapCheck);
          return; // Membatalkan penyimpanan jika waktu edit bentrok
       }
       // -------------------------------------------------------
@@ -4260,8 +4364,73 @@ export default function App() {
                 </div>
               </div>
 
-              <div className={`flex-1 overflow-y-auto whitespace-pre-line font-mono text-xs p-4 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-50 text-gray-700'}`}>
-                {overlapNotice}
+              <div className="flex-1 overflow-y-auto pr-1 mb-4 space-y-4">
+                {overlapNotice.groups && overlapNotice.groups.map((g, gi) => (
+                  <div key={gi} className={`rounded-2xl p-3.5 ${isDarkMode ? 'bg-gray-800/70' : 'bg-gray-50'}`}>
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <span className="w-7 h-7 rounded-xl bg-red-500/15 text-red-500 flex items-center justify-center font-black text-sm shrink-0">!</span>
+                      <span className={`font-black text-sm ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>BENTROK #{gi + 1} — [{g.date}]</span>
+                    </div>
+
+                    <div className={`rounded-xl p-2.5 border-l-4 border-orange-500 shadow-sm mb-2 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${g.main.isNew ? 'bg-green-500/15 text-green-600' : 'bg-yellow-500/15 text-yellow-600'}`}>
+                          {g.main.isNew ? 'BARU / AKAN DIINPUT' : 'SUDAH ADA'}
+                        </span>
+                        <span className="font-extrabold text-xs break-words">{g.main.name}</span>
+                      </div>
+                      <p className={`font-mono text-[11px] mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>[{g.main.date}] {g.main.startTxt} - [{g.main.endDate}] {g.main.endTxt}</p>
+                    </div>
+
+                    <p className={`text-[11px] font-bold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Bentrok dengan:</p>
+                    {g.members.map((m, mi) => (
+                      <div key={mi} className={`flex items-center justify-between gap-2 py-1.5 border-b border-dashed last:border-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[9px] shrink-0">{m.isNew ? '🟢' : '🟡'}</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold truncate">{m.name}</p>
+                            <p className={`font-mono text-[10px] ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>[{m.date}] {m.startTxt} - [{m.endDate}] {m.endTxt}</p>
+                          </div>
+                        </div>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${m.isNew ? 'bg-green-500/15 text-green-600' : 'bg-yellow-500/15 text-yellow-600'}`}>
+                          {m.isNew ? 'BARU' : 'ADA'}
+                        </span>
+                      </div>
+                    ))}
+
+                    <p className="mt-2.5 text-[11px] font-black text-red-500">
+                      Bertumpuk pada [{g.date}] {g.windowStartTxt} - [{g.windowEndDate}] {g.windowEndTxt}
+                    </p>
+                  </div>
+                ))}
+
+                {overlapNotice.rawText && (
+                  <div>
+                    <p className={`font-black text-xs mb-1.5 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                      Teks yang Anda input <span className="text-red-500">({(overlapNotice.highlightLines || []).length} baris bentrok)</span>:
+                    </p>
+                    <div className={`rounded-2xl overflow-hidden border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                      {overlapNotice.rawText.split('\n').map((ln, idx) => {
+                        const hl = (overlapNotice.highlightLines || []).includes(idx + 1);
+                        return (
+                          <div
+                            key={idx}
+                            className={`px-2.5 py-1 font-mono text-[10px] leading-relaxed border-l-4 ${hl
+                              ? 'bg-red-500/20 text-red-500 font-bold border-red-500'
+                              : isDarkMode
+                                ? 'text-gray-300 border-transparent'
+                                : 'text-gray-600 border-transparent'}`}
+                          >
+                            {ln || ' '}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className={`text-[10px] mt-1.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      Baris dengan latar merah = aktivitas yang terlibat tumpang tindih.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3">
