@@ -962,6 +962,34 @@ export default function App() {
       return act;
     };
 
+    // --- HELPER BARU: PEMBANDING TANGGAL (untuk validasi jam mulai > jam selesai) ---
+    const dateKey = (d) => {
+      const p = d.split('/');
+      const hasYear = p.length > 2;
+      const y = hasYear ? (parseInt(p[2], 10) < 100 ? 2000 + parseInt(p[2], 10) : parseInt(p[2], 10)) : new Date().getFullYear();
+      return (y * 10000) + (parseInt(p[1], 10) * 100) + parseInt(p[0], 10);
+    };
+
+    // --- FITUR BARU: PENOLAKAN JAM MULAI > JAM SELESAI DI TANGGAL SAMA ---
+    // Lintas tengah malam hanya sah bila tanggal penutupan nyata lebih baru
+    // daripada tanggal awal (dateKey(endDate) > dateKey(startDate)). Selain itu,
+    // jam mulai lebih besar daripada jam selesai berarti input kontradiktif.
+    const parseErrors = [];
+    const flagSameDayReverse = (startMins, endMins, startDateStr, endDateStr, label, lineIdx) => {
+      if (endMins < startMins && dateKey(endDateStr) <= dateKey(startDateStr)) {
+        parseErrors.push(`Baris ${lineIdx + 1}: ${label}`);
+        if (traceLines[lineIdx]) {
+          traceLines[lineIdx].notes.push(`DITOLAK: jam mulai > jam selesai pada tanggal yang sama (${startDateStr})`);
+        }
+      }
+    };
+    const checkClose = (seg, endTimeStr, closeDateStr, lineIdx) => {
+      if (!seg || !seg.start) return;
+      const effEnd = seg.end || endTimeStr;
+      if (!effEnd) return;
+      flagSameDayReverse(toMinOfDay(seg.start), toMinOfDay(effEnd), seg._date || '', closeDateStr, `penutupan sesi jam ${effEnd} lebih kecil dari jam mulai ${seg.start}`, lineIdx);
+    };
+
     const lines = inputText.split('\n');
     const regex = /\[?(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[, ]+(\d{2}[.:]\d{2}(?:[.:]\d{2})?)\]?\s+(.*?):\s+(.*)/;
     const newActivities = [];
@@ -1118,6 +1146,7 @@ export default function App() {
           const endDate = toMinOfDay(explicitEnd) < toMinOfDay(explicitStart) ? addDays(startDate) : startDate;
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, explicitStart, startDate, lineIdx);
               if (!lastSeg.end) lastSeg.end = explicitStart;
               activeSession.endDate = startDate; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
@@ -1148,8 +1177,11 @@ export default function App() {
             }
             const fStart = lastTime;
             const fEnd = subtractMinutes(time, forwardMins);
+            const fStartDate = lastDate || date;
+            flagSameDayReverse(toMinOfDay(fStart), toMinOfDay(fEnd), fStartDate, date, `durasi ".${forwardMins} . ${forwardName}" berakhir ${fEnd} < mulai ${fStart}`, lineIdx);
             if (activeSession) {
               const closeSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(closeSeg, fStart, lastDate || date, lineIdx);
               if (!closeSeg.end) closeSeg.end = fStart;
               activeSession.endDate = lastDate || date;
               newActivities.push(finalizeSession(activeSession));
@@ -1172,6 +1204,7 @@ export default function App() {
               const fEnd = fromAtDot ? addMinutes(fStart, forwardMins) : subtractMinutes(time, forwardMins);
               activeSession.endDate = activeSession.date;
               const lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              if (!fromAtDot) checkClose(lastSeg, fEnd, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = fEnd;
               newActivities.push(finalizeSession(activeSession));
               closeTracedSession(activeSession, fEnd, activeSession.date, lineIdx);
@@ -1197,6 +1230,7 @@ export default function App() {
         else if (isPauseMarker) {
           if (activeSession && activeSession.segments.length > 0) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, time, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = time;
           }
           traceLines[lineIdx].notes.push('Menjeda sesi aktif (akan dilanjutkan)');
@@ -1206,7 +1240,7 @@ export default function App() {
         } 
         else if (isResumeMarker) {
           if (activeSession) {
-              activeSession.segments.push({ start: time, end: null });
+              activeSession.segments.push({ start: time, end: null, _date: date });
           }
           traceLines[lineIdx].notes.push('Melanjutkan kembali sesi aktif');
           lastDate = date;
@@ -1216,6 +1250,7 @@ export default function App() {
         else if (isEndMarker) {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, time, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
@@ -1231,6 +1266,7 @@ export default function App() {
         else if (activityFromDot) {
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, time, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
@@ -1238,6 +1274,7 @@ export default function App() {
           }
           if (lastTime) {
               const startDate = lastDate || date;
+              flagSameDayReverse(toMinOfDay(lastTime), toMinOfDay(time), startDate, date, `aktivitas "${activityFromDot}" berakhir ${time} < mulai ${lastTime}`, lineIdx);
               const endDate = toMinOfDay(time) < toMinOfDay(lastTime) ? addDays(startDate) : startDate;
               let newSess = { id: crypto.randomUUID(), date: startDate, endDate, message: activityFromDot, segments: [{start: lastTime, end: time}], createdAt: Date.now() + newActivities.length };
               newActivities.push(finalizeSession(newSess));
@@ -1258,13 +1295,14 @@ export default function App() {
           // SISI .at: tutup sesi sebelumnya, lalu buka sesi baru
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, time, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
               closeTracedSession(activeSession, time, date, lineIdx);
           }
           const actStart = lastTime ? addMinutes(lastTime, atDelay) : time; // Mulai dari waktu laporan baris sebelumnya
-          activeSession = { id: crypto.randomUUID(), date: lastDate || date, endDate: lastDate || date, message, segments: [{start: actStart, end: null}], createdAt: Date.now() + newActivities.length };
+          activeSession = { id: crypto.randomUUID(), date: lastDate || date, endDate: lastDate || date, message, segments: [{start: actStart, end: null, _date: lastDate || date}], createdAt: Date.now() + newActivities.length };
           activeSession._srcLine = lineIdx;
           activeSession._srcLines = [lineIdx + 1];
           const openDetailParts = [];
@@ -1279,12 +1317,13 @@ export default function App() {
           // AKTIVITAS BARU NORMAL
           if (activeSession) {
               let lastSeg = activeSession.segments[activeSession.segments.length - 1];
+              checkClose(lastSeg, time, date, lineIdx);
               if (!lastSeg.end) lastSeg.end = time;
               activeSession.endDate = date; // <--- MENCATAT TGL SELESAI
               newActivities.push(finalizeSession(activeSession));
               closeTracedSession(activeSession, time, date, lineIdx);
           }
-          activeSession = { id: crypto.randomUUID(), date, endDate: date, message, segments: [{start: time, end: null}], createdAt: Date.now() + newActivities.length };
+          activeSession = { id: crypto.randomUUID(), date, endDate: date, message, segments: [{start: time, end: null, _date: date}], createdAt: Date.now() + newActivities.length };
           activeSession._srcLine = lineIdx;
           activeSession._srcLines = [lineIdx + 1];
           lastDate = date;
@@ -1304,6 +1343,12 @@ export default function App() {
        newActivities.push(finalizeSession(activeSession));
        const lastIdx = lastReportedLineIdx >= 0 ? lastReportedLineIdx : (traceLines.length - 1);
        closeTracedSession(activeSession, lastSeg.start, activeSession.date, lastIdx);
+    }
+
+    // --- FITUR BARU: PENOLAKAN BATCH (jam mulai > jam selesai di tanggal sama) ---
+    if (parseErrors.length > 0) {
+      alert(`DITOLAK: ${parseErrors.length} baris bermasalah karena jam mulai lebih besar daripada jam selesai pada tanggal yang sama. Tidak ada data yang disimpan.\n\n${parseErrors.join('\n')}\n\nPerbaiki dengan memastikan jam selesai lebih besar dari jam mulai, atau tulis tanggal penutup di hari berikutnya (contoh [25/9, 06.20] Me: 00.08 . Nonton) bila memang lintas tengah malam.`);
+      return;
     }
 
     // --- FITUR BARU: PECAH AKTIVITAS LINTAS TENGAH MALAM PER HARI ---
